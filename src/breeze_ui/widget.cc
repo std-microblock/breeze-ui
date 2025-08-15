@@ -135,7 +135,6 @@ void ui::widget_flex::update(update_context &ctx) {
 void ui::widget_flex::reposition_children_flex(
     update_context &ctx, std::vector<std::shared_ptr<widget>> &children) {
     float x = *padding_left, y = *padding_top;
-    float target_width = 0, target_height = 0;
 
     auto children_rev =
         reverse ? children | std::views::reverse |
@@ -150,51 +149,97 @@ void ui::widget_flex::reposition_children_flex(
     std::vector<std::pair<float, float>> measure_cache;
     measure_cache.reserve(children_rev.size());
 
-    // Cache measure results for all children
+    // Pass 1: Measure all children and calculate max dimensions
+    float target_width = 0, target_height = 0;
+    float total_fixed_size = 0;
+    
     for (auto &child : children_rev) {
         float child_width = child->measure_width(ctx);
         float child_height = child->measure_height(ctx);
         measure_cache.emplace_back(child_width, child_height);
-    }
-
-    float total_fixed_size = 0;
-    float spacer_size = 0;
-
-    // First pass: calculate total fixed size
-    for (size_t i = 0; i < children_rev.size(); ++i) {
-        auto &child = children_rev[i];
-        if (dynamic_cast<const spacer *>(child.get())) {
-            continue; // Skip spacers in first pass
-        }
-        auto [cached_width, cached_height] = measure_cache[i];
+        
         if (horizontal) {
-            total_fixed_size += cached_width;
+            target_height = std::max(target_height, child_height);
+            if (!dynamic_cast<const spacer *>(child.get())) {
+                total_fixed_size += child_width;
+            }
         } else {
-            total_fixed_size += cached_height;
+            target_width = std::max(target_width, child_width);
+            if (!dynamic_cast<const spacer *>(child.get())) {
+                total_fixed_size += child_height;
+            }
         }
     }
 
-    // Calculate spacer size
+    // Calculate spacer size if needed
+    float spacer_size = 0;
     if (spacer_count > 0) {
-        float available_space =
-            horizontal ? (*width - *padding_left - *padding_right)
-                       : (*height - *padding_top - *padding_bottom);
+        float available_space = horizontal
+            ? (*width - *padding_left - *padding_right)
+            : (*height - *padding_top - *padding_bottom);
         float gap_space = (children_rev.size() - 1) * gap;
-        spacer_size =
-            std::max(0.0f, (available_space - total_fixed_size - gap_space) /
-                               spacer_count);
+        spacer_size = std::max(0.0f,
+            (available_space - total_fixed_size - gap_space) / spacer_count);
     }
 
-    // Calculate total content size (including gaps)
+    // Calculate total content size (including gaps and spacers)
     float total_content_size = total_fixed_size +
         (children_rev.size() - 1) * gap +
         spacer_count * spacer_size;
 
-    // Calculate initial offset based on justify-content
+    // Pass 2: Apply align-items to children
+    for (size_t i = 0; i < children_rev.size(); ++i) {
+        auto &child = children_rev[i];
+        if (dynamic_cast<const spacer *>(child.get())) {
+            if (horizontal) {
+                child->width->animate_to(spacer_size);
+            } else {
+                child->height->animate_to(spacer_size);
+            }
+            continue;
+        }
+
+        auto [cached_width, cached_height] = measure_cache[i];
+        if (horizontal) {
+            switch (align_items) {
+                case align::center:
+                    child->y->animate_to(y + (target_height - cached_height) / 2);
+                    break;
+                case align::end:
+                    child->y->animate_to(y + target_height - cached_height);
+                    break;
+                case align::stretch:
+                    child->height->animate_to(target_height);
+                    break;
+                case align::start:
+                default:
+                    break;
+            }
+        } else {
+            switch (align_items) {
+                case align::center:
+                    child->x->animate_to(x + (target_width - cached_width) / 2);
+                    break;
+                case align::end:
+                    child->x->animate_to(x + target_width - cached_width);
+                    break;
+                case align::stretch:
+                    child->width->animate_to(target_width);
+                    break;
+                case align::start:
+                default:
+                    break;
+            }
+        }
+    }
+
+    // Pass 3: Apply justify-content and position children
+    float remaining_space = (horizontal
+        ? (*width - *padding_left - *padding_right)
+        : (*height - *padding_top - *padding_bottom)) - total_content_size;
+
     float initial_offset = 0;
-    float remaining_space = (horizontal ?
-        (*width - *padding_left - *padding_right) :
-        (*height - *padding_top - *padding_bottom)) - total_content_size;
+    float effective_gap = gap;
 
     switch (justify_content) {
         case justify::end:
@@ -205,16 +250,16 @@ void ui::widget_flex::reposition_children_flex(
             break;
         case justify::space_between:
             if (children_rev.size() > 1) {
-                gap += remaining_space / (children_rev.size() - 1);
+                effective_gap += remaining_space / (children_rev.size() - 1);
             }
             break;
         case justify::space_around:
-            gap += remaining_space / children_rev.size();
-            initial_offset = gap / 2;
+            effective_gap += remaining_space / children_rev.size();
+            initial_offset = effective_gap / 2;
             break;
         case justify::space_evenly:
-            gap += remaining_space / (children_rev.size() + 1);
-            initial_offset = gap;
+            effective_gap += remaining_space / (children_rev.size() + 1);
+            initial_offset = effective_gap;
             break;
         case justify::start:
         default:
@@ -223,70 +268,34 @@ void ui::widget_flex::reposition_children_flex(
 
     if (horizontal) {
         x += initial_offset;
+        for (size_t i = 0; i < children_rev.size(); ++i) {
+            auto &child = children_rev[i];
+            child->x->animate_to(x);
+            
+            float child_size = dynamic_cast<const spacer *>(child.get())
+                ? spacer_size : measure_cache[i].first;
+            x += child_size + effective_gap;
+        }
     } else {
         y += initial_offset;
+        for (size_t i = 0; i < children_rev.size(); ++i) {
+            auto &child = children_rev[i];
+            child->y->animate_to(y);
+            
+            float child_size = dynamic_cast<const spacer *>(child.get())
+                ? spacer_size : measure_cache[i].second;
+            y += child_size + effective_gap;
+        }
     }
 
-    // Second pass: position children
-    for (size_t i = 0; i < children_rev.size(); ++i) {
-        auto &child = children_rev[i];
-        child->x->animate_to(x);
-        child->y->animate_to(y);
-
-        float child_size;
-        if (dynamic_cast<const spacer *>(child.get())) {
-            child_size = spacer_size;
-            if (horizontal) {
-                child->width->animate_to(spacer_size);
-            } else {
-                child->height->animate_to(spacer_size);
-            }
-        } else {
-            auto [cached_width, cached_height] = measure_cache[i];
-            child_size = horizontal ? cached_width : cached_height;
-
-            // Handle align-items
-            if (horizontal) {
-                switch (align_items) {
-                    case align::center:
-                        child->y->animate_to(y + (target_height - cached_height) / 2);
-                        break;
-                    case align::end:
-                        child->y->animate_to(y + target_height - cached_height);
-                        break;
-                    case align::stretch:
-                        child->height->animate_to(target_height);
-                        break;
-                    case align::start:
-                    default:
-                        break;
-                }
-            } else {
-                switch (align_items) {
-                    case align::center:
-                        child->x->animate_to(x + (target_width - cached_width) / 2);
-                        break;
-                    case align::end:
-                        child->x->animate_to(x + target_width - cached_width);
-                        break;
-                    case align::stretch:
-                        child->width->animate_to(target_width);
-                        break;
-                    case align::start:
-                    default:
-                        break;
-                }
-            }
-        }
-
+    // Update container size if auto_size enabled
+    if (auto_size) {
         if (horizontal) {
-            x += child_size + gap;
-            auto [cached_width, cached_height] = measure_cache[i];
-            target_height = std::max(target_height, cached_height);
+            width->animate_to(x - effective_gap + *padding_right);
+            height->animate_to(target_height + *padding_top + *padding_bottom);
         } else {
-            y += child_size + gap;
-            auto [cached_width, cached_height] = measure_cache[i];
-            target_width = std::max(target_width, cached_width);
+            width->animate_to(target_width + *padding_left + *padding_right);
+            height->animate_to(y - effective_gap + *padding_bottom);
         }
     }
 
