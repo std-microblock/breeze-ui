@@ -6,7 +6,6 @@ add_rules("plugin.compile_commands.autoupdate", {outputdir = "build"})
 add_rules("mode.releasedbg")
 includes("deps/glfw.lua")
 
-set_runtimes("MT")
 add_requires("breeze-glfw", {alias = "glfw"})
 add_requires("nanovg", "glad", "nanosvg")
 
