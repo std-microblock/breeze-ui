@@ -17,7 +17,7 @@ target("breeze_ui")
     })
     add_syslinks("dwmapi", "shcore")
     add_files("src/breeze_ui/*.cc")
-    add_headerfiles("src/breeze_ui/*.h")
+    add_headerfiles("src/(breeze_ui/*.h)")
     add_includedirs("src/", {
         public = true
     })
