@@ -136,6 +136,11 @@ void ui::widget_flex::reposition_children_flex(
     update_context &ctx, std::vector<std::shared_ptr<widget>> &children) {
     float x = *padding_left, y = *padding_top;
 
+    constexpr bool round_position = true;
+    auto round = [](float value) {
+        return round_position ? std::round(value) : value;
+    };
+
     auto children_rev =
         reverse ? children | std::views::reverse |
                       std::ranges::to<std::vector<std::shared_ptr<widget>>>()
@@ -190,11 +195,11 @@ void ui::widget_flex::reposition_children_flex(
     // Set container dimensions if auto_size enabled
     if (auto_size) {
         if (horizontal) {
-            width->animate_to(total_content_size + *padding_left + *padding_right);
-            height->animate_to(max_child_height + *padding_top + *padding_bottom);
+            width->animate_to(round(total_content_size + *padding_left + *padding_right));
+            height->animate_to(round(max_child_height + *padding_top + *padding_bottom));
         } else {
-            width->animate_to(max_child_width + *padding_left + *padding_right);
-            height->animate_to(total_content_size + *padding_top + *padding_bottom);
+            width->animate_to(round(max_child_width + *padding_left + *padding_right));
+            height->animate_to(round(total_content_size + *padding_top + *padding_bottom));
         }
     }
 
@@ -218,13 +223,13 @@ void ui::widget_flex::reposition_children_flex(
         if (horizontal) {
             switch (align_items) {
                 case align::center:
-                    child->y->animate_to(y + (container_height - cached_height) / 2);
+                    child->y->animate_to(round(y + (container_height - cached_height) / 2));
                     break;
                 case align::end:
-                    child->y->animate_to(y + container_height - cached_height);
+                    child->y->animate_to(round(y + container_height - cached_height));
                     break;
                 case align::stretch:
-                    child->height->animate_to(container_height);
+                    child->height->animate_to(round(container_height));
                     break;
                 case align::start:
                 default:
@@ -233,13 +238,13 @@ void ui::widget_flex::reposition_children_flex(
         } else {
             switch (align_items) {
                 case align::center:
-                    child->x->animate_to(x + (container_width - cached_width) / 2);
+                    child->x->animate_to(round(x + (container_width - cached_width) / 2));
                     break;
                 case align::end:
-                    child->x->animate_to(x + container_width - cached_width);
+                    child->x->animate_to(round(x + container_width - cached_width));
                     break;
                 case align::stretch:
-                    child->width->animate_to(container_width);
+                    child->width->animate_to(round(container_width));
                     break;
                 case align::start:
                 default:
@@ -282,7 +287,7 @@ void ui::widget_flex::reposition_children_flex(
         x += initial_offset;
         for (size_t i = 0; i < children_rev.size(); ++i) {
             auto &child = children_rev[i];
-            child->x->animate_to(x);
+            child->x->animate_to(round(x));
             
             float child_size = dynamic_cast<const spacer *>(child.get())
                 ? spacer_size : measure_cache[i].first;
@@ -292,7 +297,7 @@ void ui::widget_flex::reposition_children_flex(
         y += initial_offset;
         for (size_t i = 0; i < children_rev.size(); ++i) {
             auto &child = children_rev[i];
-            child->y->animate_to(y);
+            child->y->animate_to(round(y));
             
             float child_size = dynamic_cast<const spacer *>(child.get())
                 ? spacer_size : measure_cache[i].second;
