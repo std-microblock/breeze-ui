@@ -149,8 +149,8 @@ void ui::widget_flex::reposition_children_flex(
     std::vector<std::pair<float, float>> measure_cache;
     measure_cache.reserve(children_rev.size());
 
-    // Pass 1: Measure all children and calculate max dimensions
-    float target_width = 0, target_height = 0;
+    // Pass 1: Measure all children
+    float max_child_width = 0, max_child_height = 0;
     float total_fixed_size = 0;
     
     for (auto &child : children_rev) {
@@ -159,12 +159,12 @@ void ui::widget_flex::reposition_children_flex(
         measure_cache.emplace_back(child_width, child_height);
         
         if (horizontal) {
-            target_height = std::max(target_height, child_height);
+            max_child_height = std::max(max_child_height, child_height);
             if (!dynamic_cast<const spacer *>(child.get())) {
                 total_fixed_size += child_width;
             }
         } else {
-            target_width = std::max(target_width, child_width);
+            max_child_width = std::max(max_child_width, child_width);
             if (!dynamic_cast<const spacer *>(child.get())) {
                 total_fixed_size += child_height;
             }
@@ -175,8 +175,8 @@ void ui::widget_flex::reposition_children_flex(
     float spacer_size = 0;
     if (spacer_count > 0) {
         float available_space = horizontal
-            ? (*width - *padding_left - *padding_right)
-            : (*height - *padding_top - *padding_bottom);
+            ? (width->dest() - *padding_left - *padding_right)
+            : (height->dest() - *padding_top - *padding_bottom);
         float gap_space = (children_rev.size() - 1) * gap;
         spacer_size = std::max(0.0f,
             (available_space - total_fixed_size - gap_space) / spacer_count);
@@ -186,6 +186,21 @@ void ui::widget_flex::reposition_children_flex(
     float total_content_size = total_fixed_size +
         (children_rev.size() - 1) * gap +
         spacer_count * spacer_size;
+
+    // Set container dimensions if auto_size enabled
+    if (auto_size) {
+        if (horizontal) {
+            width->animate_to(total_content_size + *padding_left + *padding_right);
+            height->animate_to(max_child_height + *padding_top + *padding_bottom);
+        } else {
+            width->animate_to(max_child_width + *padding_left + *padding_right);
+            height->animate_to(total_content_size + *padding_top + *padding_bottom);
+        }
+    }
+
+    // Get final container dimensions for layout
+    float container_width = width->dest() - *padding_left - *padding_right;
+    float container_height = height->dest() - *padding_top - *padding_bottom;
 
     // Pass 2: Apply align-items to children
     for (size_t i = 0; i < children_rev.size(); ++i) {
@@ -203,13 +218,13 @@ void ui::widget_flex::reposition_children_flex(
         if (horizontal) {
             switch (align_items) {
                 case align::center:
-                    child->y->animate_to(y + (target_height - cached_height) / 2);
+                    child->y->animate_to(y + (container_height - cached_height) / 2);
                     break;
                 case align::end:
-                    child->y->animate_to(y + target_height - cached_height);
+                    child->y->animate_to(y + container_height - cached_height);
                     break;
                 case align::stretch:
-                    child->height->animate_to(target_height);
+                    child->height->animate_to(container_height);
                     break;
                 case align::start:
                 default:
@@ -218,13 +233,13 @@ void ui::widget_flex::reposition_children_flex(
         } else {
             switch (align_items) {
                 case align::center:
-                    child->x->animate_to(x + (target_width - cached_width) / 2);
+                    child->x->animate_to(x + (container_width - cached_width) / 2);
                     break;
                 case align::end:
-                    child->x->animate_to(x + target_width - cached_width);
+                    child->x->animate_to(x + container_width - cached_width);
                     break;
                 case align::stretch:
-                    child->width->animate_to(target_width);
+                    child->width->animate_to(container_width);
                     break;
                 case align::start:
                 default:
@@ -234,10 +249,7 @@ void ui::widget_flex::reposition_children_flex(
     }
 
     // Pass 3: Apply justify-content and position children
-    float remaining_space = (horizontal
-        ? (*width - *padding_left - *padding_right)
-        : (*height - *padding_top - *padding_bottom)) - total_content_size;
-
+    float remaining_space = (horizontal ? container_width : container_height) - total_content_size;
     float initial_offset = 0;
     float effective_gap = gap;
 
@@ -285,35 +297,6 @@ void ui::widget_flex::reposition_children_flex(
             float child_size = dynamic_cast<const spacer *>(child.get())
                 ? spacer_size : measure_cache[i].second;
             y += child_size + effective_gap;
-        }
-    }
-
-    // Update container size if auto_size enabled
-    if (auto_size) {
-        if (horizontal) {
-            width->animate_to(x - effective_gap + *padding_right);
-            height->animate_to(target_height + *padding_top + *padding_bottom);
-        } else {
-            width->animate_to(target_width + *padding_left + *padding_right);
-            height->animate_to(y - effective_gap + *padding_bottom);
-        }
-    }
-
-    if (auto_size) {
-        if (horizontal) {
-            width->animate_to(x - gap + *padding_left + *padding_right);
-            height->animate_to(target_height + *padding_top + *padding_bottom);
-
-            for (auto &child : children) {
-                child->height->animate_to(target_height);
-            }
-        } else {
-            width->animate_to(target_width + *padding_left + *padding_right);
-            height->animate_to(y - gap + *padding_top + *padding_bottom);
-
-            for (auto &child : children) {
-                child->width->animate_to(target_width);
-            }
         }
     }
 }
