@@ -185,6 +185,48 @@ void ui::widget_flex::reposition_children_flex(
                                spacer_count);
     }
 
+    // Calculate total content size (including gaps)
+    float total_content_size = total_fixed_size +
+        (children_rev.size() - 1) * gap +
+        spacer_count * spacer_size;
+
+    // Calculate initial offset based on justify-content
+    float initial_offset = 0;
+    float remaining_space = (horizontal ?
+        (*width - *padding_left - *padding_right) :
+        (*height - *padding_top - *padding_bottom)) - total_content_size;
+
+    switch (justify_content) {
+        case justify::end:
+            initial_offset = remaining_space;
+            break;
+        case justify::center:
+            initial_offset = remaining_space / 2;
+            break;
+        case justify::space_between:
+            if (children_rev.size() > 1) {
+                gap += remaining_space / (children_rev.size() - 1);
+            }
+            break;
+        case justify::space_around:
+            gap += remaining_space / children_rev.size();
+            initial_offset = gap / 2;
+            break;
+        case justify::space_evenly:
+            gap += remaining_space / (children_rev.size() + 1);
+            initial_offset = gap;
+            break;
+        case justify::start:
+        default:
+            break;
+    }
+
+    if (horizontal) {
+        x += initial_offset;
+    } else {
+        y += initial_offset;
+    }
+
     // Second pass: position children
     for (size_t i = 0; i < children_rev.size(); ++i) {
         auto &child = children_rev[i];
@@ -202,6 +244,39 @@ void ui::widget_flex::reposition_children_flex(
         } else {
             auto [cached_width, cached_height] = measure_cache[i];
             child_size = horizontal ? cached_width : cached_height;
+
+            // Handle align-items
+            if (horizontal) {
+                switch (align_items) {
+                    case align::center:
+                        child->y->animate_to(y + (target_height - cached_height) / 2);
+                        break;
+                    case align::end:
+                        child->y->animate_to(y + target_height - cached_height);
+                        break;
+                    case align::stretch:
+                        child->height->animate_to(target_height);
+                        break;
+                    case align::start:
+                    default:
+                        break;
+                }
+            } else {
+                switch (align_items) {
+                    case align::center:
+                        child->x->animate_to(x + (target_width - cached_width) / 2);
+                        break;
+                    case align::end:
+                        child->x->animate_to(x + target_width - cached_width);
+                        break;
+                    case align::stretch:
+                        child->width->animate_to(target_width);
+                        break;
+                    case align::start:
+                    default:
+                        break;
+                }
+            }
         }
 
         if (horizontal) {

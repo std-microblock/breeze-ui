@@ -221,10 +221,28 @@ struct widget : std::enable_shared_from_this<widget> {
 
 // A widget with child which lays out children in a row or column
 struct widget_flex : public widget {
+    enum class justify {
+        start,
+        end,
+        center,
+        space_between,
+        space_around,
+        space_evenly
+    };
+
+    enum class align {
+        start,
+        end,
+        center,
+        stretch
+    };
+
     float gap = 0;
     bool horizontal = false;
     bool auto_size = true;
     bool reverse = false;
+    justify justify_content = justify::start;
+    align align_items = align::start;
     sp_anim_float padding_left = anim_float(), padding_right = anim_float(),
                   padding_top = anim_float(), padding_bottom = anim_float();
     void
