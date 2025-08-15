@@ -131,7 +131,7 @@ struct widget : std::enable_shared_from_this<widget> {
 
     float _debug_offset_cache[2];
     bool enable_child_clipping = false;
-    bool needs_repaint = false;
+    bool needs_repaint = true;
     float last_offset_x = 0, last_offset_y = 0;
 
     // Time until the widget is removed from the tree
