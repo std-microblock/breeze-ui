@@ -129,7 +129,7 @@ struct render_target {
   std::recursive_mutex rt_lock{};
   std::mutex loop_thread_tasks_lock{};
   std::queue<std::function<void()>> loop_thread_tasks{};
-  void post_loop_thread_task(std::function<void()> task);
+  void post_loop_thread_task(std::function<void()> task, bool delay = false);
   template <typename T>
   T inline post_loop_thread_task(std::function<T()> task) {
     std::promise<T> p;

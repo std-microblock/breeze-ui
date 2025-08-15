@@ -463,8 +463,8 @@ void render_target::hide_as_close() {
     // reset owner widget
     SetWindowLong(glfwGetWin32Window(window), GWLP_HWNDPARENT, 0);
 }
-void render_target::post_loop_thread_task(std::function<void()> task) {
-    if (is_in_loop_thread) {
+void render_target::post_loop_thread_task(std::function<void()> task, bool delay) {
+    if (is_in_loop_thread && !delay) {
         task();
         return;
     }
