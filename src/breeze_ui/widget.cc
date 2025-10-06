@@ -249,6 +249,8 @@ void ui::widget_flex::reposition_children_flex(
                     child->width->animate_to(round(container_width));
                     break;
                 case align::start:
+                    child->x->animate_to(round(x));
+                    break;
                 default:
                     break;
             }
