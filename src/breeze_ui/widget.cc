@@ -178,7 +178,7 @@ void ui::widget_flex::reposition_children_flex(
 
     // Calculate spacer size if needed
     float spacer_size = 0;
-    if (spacer_count > 0) {
+    if (spacer_count > 0 && !auto_size) {
         float available_space = horizontal
             ? (width->dest() - *padding_left - *padding_right)
             : (height->dest() - *padding_top - *padding_bottom);
