@@ -230,6 +230,7 @@ void ui::widget_flex::reposition_children_flex(
                     break;
                 case align::stretch:
                     child->height->animate_to(round(container_height));
+                    child->y->animate_to(round(y));
                     break;
                 case align::start:
                     child->y->animate_to(round(y));
@@ -247,6 +248,7 @@ void ui::widget_flex::reposition_children_flex(
                     break;
                 case align::stretch:
                     child->width->animate_to(round(container_width));
+                    child->x->animate_to(round(x));
                     break;
                 case align::start:
                     child->x->animate_to(round(x));
