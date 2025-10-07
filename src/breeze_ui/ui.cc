@@ -103,8 +103,8 @@ void render_target::start_loop() {
             std::lock_guard lock(rt_lock);
             root->children.clear();
         }
-        glfwMakeContextCurrent(nullptr);
     }
+    glfwMakeContextCurrent(nullptr);
 }
 std::expected<bool, std::string> render_target::init() {
     root = std::make_shared<widget>();
@@ -125,10 +125,10 @@ std::expected<bool, std::string> render_target::init() {
             glfwWindowHint(GLFW_TRANSPARENT_FRAMEBUFFER, 0);
         }
         glfwWindowHint(GLFW_DECORATED, decorated);
-
         glfwWindowHint(GLFW_VISIBLE, 0);
         window =
             glfwCreateWindow(width, height, title.c_str(), nullptr, nullptr);
+        glfwMakeContextCurrent(nullptr);
         p.set_value();
     });
 
@@ -252,7 +252,7 @@ std::expected<bool, std::string> render_target::init() {
     if (!nvg) {
         return std::unexpected("Failed to create NanoVG context");
     }
-
+    glfwMakeContextCurrent(nullptr);
     return true;
 }
 
@@ -407,6 +407,7 @@ void render_target::render() {
         }
         time_checkpoints("Render root");
     }
+    glfwMakeContextCurrent(nullptr);
 }
 void render_target::reset_view() {
     if (!nvg)
@@ -463,7 +464,8 @@ void render_target::hide_as_close() {
     // reset owner widget
     SetWindowLong(glfwGetWin32Window(window), GWLP_HWNDPARENT, 0);
 }
-void render_target::post_loop_thread_task(std::function<void()> task, bool delay) {
+void render_target::post_loop_thread_task(std::function<void()> task,
+                                          bool delay) {
     if (is_in_loop_thread && !delay) {
         task();
         return;
