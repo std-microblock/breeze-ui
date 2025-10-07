@@ -153,7 +153,7 @@ std::expected<bool, std::string> render_target::init() {
         };
         DwmExtendFrameIntoClientArea(h, &margins);
     }
-
+    RegisterTouchWindow(h, 0);
     if (acrylic) {
         DWM_BLURBEHIND bb = {0};
         bb.dwFlags = DWM_BB_ENABLE;
