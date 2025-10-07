@@ -377,7 +377,6 @@ void render_target::render() {
     ctx.mouse_up = !ctx.mouse_down && mouse_down;
     mouse_down = ctx.mouse_down;
     right_mouse_down = ctx.right_mouse_down;
-    glfwMakeContextCurrent(window);
     {
         time_checkpoints("Update context");
         {
@@ -407,7 +406,6 @@ void render_target::render() {
         }
         time_checkpoints("Render root");
     }
-    glfwMakeContextCurrent(nullptr);
 }
 void render_target::reset_view() {
     if (!nvg)
