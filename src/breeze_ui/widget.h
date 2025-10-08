@@ -220,7 +220,7 @@ struct widget : std::enable_shared_from_this<widget> {
 };
 
 // A widget with child which lays out children in a row or column
-struct widget_flex : public widget {
+struct flex_widget : public widget {
     enum class justify {
         start,
         end,

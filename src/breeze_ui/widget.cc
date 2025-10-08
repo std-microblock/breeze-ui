@@ -127,12 +127,12 @@ bool ui::update_context::hovered(widget *w, bool hittest) const {
 }
 float ui::widget::measure_height(update_context &ctx) { return height->dest(); }
 float ui::widget::measure_width(update_context &ctx) { return width->dest(); }
-void ui::widget_flex::update(update_context &ctx) {
+void ui::flex_widget::update(update_context &ctx) {
     widget::update(ctx);
     auto forkctx = ctx.with_offset(*x, *y);
     reposition_children_flex(forkctx, children);
 }
-void ui::widget_flex::reposition_children_flex(
+void ui::flex_widget::reposition_children_flex(
     update_context &ctx, std::vector<std::shared_ptr<widget>> &children) {
     float x = *padding_left, y = *padding_top;
 
