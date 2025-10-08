@@ -366,10 +366,9 @@ bool ui::flex_widget::should_autosize(bool mainAxis) const {
     //     (!flex_parent->horizontal && !horizontal && mainAxis) ||
     //     (flex_parent->horizontal && !horizontal && mainAxis) ||
     //     (!flex_parent->horizontal && horizontal && !mainAxis))
+    //         return true;
     // simplified to:
-    if (horizontal != mainAxis)
-        return false;
-    return true;
+    return horizontal != mainAxis;
 }
 
 void ui::update_context::set_hit_hovered(widget *w) {
