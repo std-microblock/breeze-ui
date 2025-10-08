@@ -169,6 +169,12 @@ inline auto debugDumpPathCache() { return nvgDebugDumpPathCache(ctx); }
     return std::make_pair(bounds[2] - bounds[0], bounds[3] - bounds[1]);
   }
 
+  inline auto measureTextBox(const char *string, float breakRowWidth) {
+    float bounds[4];
+    textBoxBounds(0, 0, breakRowWidth, string, nullptr, bounds);
+    return std::make_pair(bounds[2] - bounds[0], bounds[3] - bounds[1]);
+  }
+
   inline nanovg_context with_offset(float x, float y) {
     auto copy = *this;
     copy.offset_x = x + offset_x;

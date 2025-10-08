@@ -157,12 +157,12 @@ void ui::widget_flex::reposition_children_flex(
     // Pass 1: Measure all children
     float max_child_width = 0, max_child_height = 0;
     float total_fixed_size = 0;
-    
+
     for (auto &child : children_rev) {
         float child_width = child->measure_width(ctx);
         float child_height = child->measure_height(ctx);
         measure_cache.emplace_back(child_width, child_height);
-        
+
         if (horizontal) {
             max_child_height = std::max(max_child_height, child_height);
             if (!dynamic_cast<const spacer *>(child.get())) {
@@ -179,27 +179,32 @@ void ui::widget_flex::reposition_children_flex(
     // Calculate spacer size if needed
     float spacer_size = 0;
     if (spacer_count > 0 && !auto_size) {
-        float available_space = horizontal
-            ? (width->dest() - *padding_left - *padding_right)
-            : (height->dest() - *padding_top - *padding_bottom);
+        float available_space =
+            horizontal ? (width->dest() - *padding_left - *padding_right)
+                       : (height->dest() - *padding_top - *padding_bottom);
         float gap_space = (children_rev.size() - 1) * gap;
-        spacer_size = std::max(0.0f,
-            (available_space - total_fixed_size - gap_space) / spacer_count);
+        spacer_size =
+            std::max(0.0f, (available_space - total_fixed_size - gap_space) /
+                               spacer_count);
     }
 
     // Calculate total content size (including gaps and spacers)
     float total_content_size = total_fixed_size +
-        (children_rev.size() - 1) * gap +
-        spacer_count * spacer_size;
+                               (children_rev.size() - 1) * gap +
+                               spacer_count * spacer_size;
 
     // Set container dimensions if auto_size enabled
     if (auto_size) {
         if (horizontal) {
-            width->animate_to(round(total_content_size + *padding_left + *padding_right));
-            height->animate_to(round(max_child_height + *padding_top + *padding_bottom));
+            width->animate_to(
+                round(total_content_size + *padding_left + *padding_right));
+            height->animate_to(
+                round(max_child_height + *padding_top + *padding_bottom));
         } else {
-            width->animate_to(round(max_child_width + *padding_left + *padding_right));
-            height->animate_to(round(total_content_size + *padding_top + *padding_bottom));
+            width->animate_to(
+                round(max_child_width + *padding_left + *padding_right));
+            height->animate_to(
+                round(total_content_size + *padding_top + *padding_bottom));
         }
     }
 
@@ -222,71 +227,75 @@ void ui::widget_flex::reposition_children_flex(
         auto [cached_width, cached_height] = measure_cache[i];
         if (horizontal) {
             switch (align_items) {
-                case align::center:
-                    child->y->animate_to(round(y + (container_height - cached_height) / 2));
-                    break;
-                case align::end:
-                    child->y->animate_to(round(y + container_height - cached_height));
-                    break;
-                case align::stretch:
-                    child->height->animate_to(round(container_height));
-                    child->y->animate_to(round(y));
-                    break;
-                case align::start:
-                    child->y->animate_to(round(y));
-                    break;
-                default:
-                    break;
+            case align::center:
+                child->y->animate_to(
+                    round(y + (container_height - cached_height) / 2));
+                break;
+            case align::end:
+                child->y->animate_to(
+                    round(y + container_height - cached_height));
+                break;
+            case align::stretch:
+                child->height->animate_to(round(container_height));
+                child->y->animate_to(round(y));
+                break;
+            case align::start:
+                child->y->animate_to(round(y));
+                break;
+            default:
+                break;
             }
         } else {
             switch (align_items) {
-                case align::center:
-                    child->x->animate_to(round(x + (container_width - cached_width) / 2));
-                    break;
-                case align::end:
-                    child->x->animate_to(round(x + container_width - cached_width));
-                    break;
-                case align::stretch:
-                    child->width->animate_to(round(container_width));
-                    child->x->animate_to(round(x));
-                    break;
-                case align::start:
-                    child->x->animate_to(round(x));
-                    break;
-                default:
-                    break;
+            case align::center:
+                child->x->animate_to(
+                    round(x + (container_width - cached_width) / 2));
+                break;
+            case align::end:
+                child->x->animate_to(round(x + container_width - cached_width));
+                break;
+            case align::stretch:
+                child->width->animate_to(round(container_width));
+                child->x->animate_to(round(x));
+                break;
+            case align::start:
+                child->x->animate_to(round(x));
+                break;
+            default:
+                break;
             }
         }
     }
 
     // Pass 3: Apply justify-content and position children
-    float remaining_space = (horizontal ? container_width : container_height) - total_content_size;
+    float remaining_space =
+        (horizontal ? container_width : container_height) - total_content_size;
     float initial_offset = 0;
     float effective_gap = gap;
 
     switch (justify_content) {
-        case justify::end:
-            initial_offset = remaining_space;
-            break;
-        case justify::center:
-            initial_offset = remaining_space / 2;
-            break;
-        case justify::space_between:
-            if (children_rev.size() > 1) {
-                effective_gap += remaining_space / (children_rev.size() - 1);
-            }
-            break;
-        case justify::space_around:
-            effective_gap += remaining_space / children_rev.size();
-            initial_offset = effective_gap / 2;
-            break;
-        case justify::space_evenly:
-            effective_gap += remaining_space / (children_rev.size() + 1);
-            initial_offset = effective_gap;
-            break;
-        case justify::start:
-        default:
-            break;
+    case justify::end:
+        initial_offset = remaining_space;
+        break;
+    case justify::center:
+        initial_offset = remaining_space / 2;
+        break;
+    case justify::space_between:
+        if (children_rev.size() > 1) {
+            effective_gap += remaining_space / (children_rev.size() - 1);
+        }
+        break;
+    case justify::space_around:
+        effective_gap += remaining_space / children_rev.size();
+        initial_offset = effective_gap / 2;
+        break;
+    case justify::space_evenly:
+        effective_gap += remaining_space / (children_rev.size() + 1);
+        initial_offset = effective_gap;
+        break;
+    case justify::start:
+    default:
+        break;
     }
 
     if (horizontal) {
@@ -294,9 +303,10 @@ void ui::widget_flex::reposition_children_flex(
         for (size_t i = 0; i < children_rev.size(); ++i) {
             auto &child = children_rev[i];
             child->x->animate_to(round(x));
-            
+
             float child_size = dynamic_cast<const spacer *>(child.get())
-                ? spacer_size : measure_cache[i].first;
+                                   ? spacer_size
+                                   : measure_cache[i].first;
             x += child_size + effective_gap;
         }
     } else {
@@ -304,9 +314,10 @@ void ui::widget_flex::reposition_children_flex(
         for (size_t i = 0; i < children_rev.size(); ++i) {
             auto &child = children_rev[i];
             child->y->animate_to(round(y));
-            
+
             float child_size = dynamic_cast<const spacer *>(child.get())
-                ? spacer_size : measure_cache[i].second;
+                                   ? spacer_size
+                                   : measure_cache[i].second;
             y += child_size + effective_gap;
         }
     }
@@ -366,19 +377,26 @@ void ui::text_widget::render(nanovg_context ctx) {
     ctx.textAlign(NVG_ALIGN_TOP | NVG_ALIGN_LEFT);
     ctx.fontFace(font_family.c_str());
 
-    ctx.text(*x, *y, text.c_str(), nullptr);
+    if (max_width > 0) {
+        ctx.textBox(*x, *y, max_width, text.c_str(), nullptr);
+        return;
+    } else {
+        ctx.text(*x, *y, text.c_str(), nullptr);
+    }
 }
 void ui::text_widget::update(update_context &ctx) {
     widget::update(ctx);
     ctx.vg.fontSize(font_size);
     ctx.vg.fontFace(font_family.c_str());
-    auto text = ctx.vg.measureText(this->text.c_str());
+    auto text = max_width < 0 ? ctx.vg.measureText(this->text.c_str())
+                              : ctx.vg.measureTextBox(this->text.c_str(), max_width);
 
-    if (strink_horizontal) {
-        width->animate_to(text.first);
+    if (shrink_horizontal) {
+        width->animate_to(max_width > 0 ? std::min(text.first, max_width)
+                                        : text.first);
     }
 
-    if (strink_vertical) {
+    if (shrink_vertical) {
         height->animate_to(text.second);
     }
 }

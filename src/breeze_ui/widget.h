@@ -260,10 +260,11 @@ struct text_widget : public widget {
     float font_size = 14;
     std::string font_family = "main";
     animated_color color = {this, 0, 0, 0, 1, "txt"};
+    float max_width = -1; // <=0 means no limit
 
     void render(nanovg_context ctx) override;
 
-    bool strink_vertical = true, strink_horizontal = true;
+    bool shrink_vertical = true, shrink_horizontal = true;
     void update(update_context &ctx) override;
 };
 
