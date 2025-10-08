@@ -245,6 +245,12 @@ struct flex_widget : public widget {
                              std::vector<std::shared_ptr<widget>> &children);
     void update(update_context &ctx) override;
 
+    float measure_height(update_context &ctx) override;
+    float measure_width(update_context &ctx) override;
+
+    // Determine if the widget should auto size in the given direction
+    bool should_autosize(bool mainAxis) const;
+
     struct spacer : public widget {
         float size = 1;
     };

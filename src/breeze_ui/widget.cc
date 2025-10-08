@@ -194,28 +194,18 @@ void ui::flex_widget::reposition_children_flex(
                                spacer_count * spacer_size;
 
     // Set container dimensions if auto_size enabled
-    // If the parent is a flex_widget with align_items stretch, do not auto size
-    // the side dimensions
-    auto flex_parent = dynamic_cast<flex_widget *>(parent);
-    bool parent_is_stretch =
-        flex_parent && flex_parent->align_items == align::stretch;
-    bool parent_is_horizontal = flex_parent && flex_parent->horizontal;
-    if (auto_size) {
-        if (horizontal) {
-            if (!parent_is_stretch || parent_is_horizontal)
-                width->animate_to(
-                    round(total_content_size + *padding_left + *padding_right));
-            if (!parent_is_stretch || !parent_is_horizontal)
-                height->animate_to(
-                    round(max_child_height + *padding_top + *padding_bottom));
-        } else {
-            if (!parent_is_stretch || parent_is_horizontal)
-                width->animate_to(
-                    round(max_child_width + *padding_left + *padding_right));
-            if (!parent_is_stretch || !parent_is_horizontal)
-                height->animate_to(
-                    round(total_content_size + *padding_top + *padding_bottom));
-        }
+    // should_autosize decides if we should auto size in the main axis
+    // When horizontal is true, the main axis is width side
+    if (should_autosize(horizontal)) {
+        width->animate_to(
+            round((horizontal ? total_content_size : max_child_width) +
+                  *padding_left + *padding_right));
+    }
+
+    if (should_autosize(!horizontal)) {
+        height->animate_to(
+            round((horizontal ? max_child_height : total_content_size) +
+                  *padding_top + *padding_bottom));
     }
 
     // Get final container dimensions for layout
@@ -331,6 +321,54 @@ void ui::flex_widget::reposition_children_flex(
             y += child_size + effective_gap;
         }
     }
+}
+
+float ui::flex_widget::measure_height(update_context &ctx) {
+    if (should_autosize(horizontal)) {
+        float max_height = 0;
+        for (auto &child : children) {
+            max_height = std::max(max_height, child->measure_height(ctx));
+        }
+        return max_height + *padding_top + *padding_bottom;
+    } else {
+        return height->dest();
+    }
+}
+float ui::flex_widget::measure_width(update_context &ctx) {
+    if (should_autosize(!horizontal)) {
+        float max_width = 0;
+        for (auto &child : children) {
+            max_width = std::max(max_width, child->measure_width(ctx));
+        }
+        return max_width + *padding_left + *padding_right;
+    } else {
+        return width->dest();
+    }
+}
+
+bool ui::flex_widget::should_autosize(bool mainAxis) const {
+    if (!auto_size)
+        return false;
+    if (!parent)
+        return true;
+    auto flex_parent = dynamic_cast<flex_widget *>(parent);
+    if (!flex_parent)
+        return true;
+    if (flex_parent->align_items != align::stretch)
+        return true;
+    // If the parent is horizontal and is stretching, do not auto size in the
+    // cross axis of the parent
+    // When the parent is horizontal, the cross axis is vertical
+    // When the parent is vertical, the cross axis is horizontal
+    // so it would be
+    // if ((flex_parent->horizontal && horizontal && !mainAxis) ||
+    //     (!flex_parent->horizontal && !horizontal && mainAxis) ||
+    //     (flex_parent->horizontal && !horizontal && mainAxis) ||
+    //     (!flex_parent->horizontal && horizontal && !mainAxis))
+    // simplified to:
+    if ((flex_parent->horizontal == horizontal) == mainAxis)
+        return false;
+    return true;
 }
 
 void ui::update_context::set_hit_hovered(widget *w) {
