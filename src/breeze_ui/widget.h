@@ -251,7 +251,9 @@ struct flex_widget : public widget {
     float measure_height(update_context &ctx) override;
     float measure_width(update_context &ctx) override;
 
-    // Determine if the widget should auto size in the given direction
+    // Determine if the widget should auto size in the given direction.
+    // `should_autosize(horizontal)` checks width side.
+    // `should_autosize(!horizontal)` checks height side.
     bool should_autosize(bool mainAxis) const;
 
     struct spacer : public widget {
