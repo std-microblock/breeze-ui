@@ -367,7 +367,7 @@ bool ui::flex_widget::should_autosize(bool mainAxis) const {
     //     (flex_parent->horizontal && !horizontal && mainAxis) ||
     //     (!flex_parent->horizontal && horizontal && !mainAxis))
     // simplified to:
-    if (horizontal == mainAxis)
+    if (horizontal != mainAxis)
         return false;
     return true;
 }
