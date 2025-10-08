@@ -327,18 +327,36 @@ void ui::flex_widget::reposition_children_flex(
 }
 
 float ui::flex_widget::measure_height(update_context &ctx) {
-    float max_height = 0;
-    for (auto &child : children) {
-        max_height = std::max(max_height, child->measure_height(ctx));
+    if (horizontal) {
+        float max_height = 0;
+        for (auto &child : children) {
+            max_height = std::max(max_height, child->measure_height(ctx));
+        }
+        return max_height + *padding_top + *padding_bottom;
+    } else {
+        float total_height = 0;
+        for (auto &child : children) {
+            total_height += child->measure_height(ctx);
+        }
+        total_height += (children.size() - 1) * gap;
+        return total_height + *padding_top + *padding_bottom;
     }
-    return max_height + *padding_top + *padding_bottom;
 }
 float ui::flex_widget::measure_width(update_context &ctx) {
-    float max_width = 0;
-    for (auto &child : children) {
-        max_width = std::max(max_width, child->measure_width(ctx));
+    if (horizontal) {
+        float total_width = 0;
+        for (auto &child : children) {
+            total_width += child->measure_width(ctx);
+        }
+        total_width += (children.size() - 1) * gap;
+        return total_width + *padding_left + *padding_right;
+    } else {
+        float max_width = 0;
+        for (auto &child : children) {
+            max_width = std::max(max_width, child->measure_width(ctx));
+        }
+        return max_width + *padding_left + *padding_right;
     }
-    return max_width + *padding_left + *padding_right;
 }
 
 bool ui::flex_widget::should_autosize(bool mainAxis) const {
