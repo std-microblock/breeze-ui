@@ -194,17 +194,27 @@ void ui::flex_widget::reposition_children_flex(
                                spacer_count * spacer_size;
 
     // Set container dimensions if auto_size enabled
+    // If the parent is a flex_widget with align_items stretch, do not auto size
+    // the side dimensions
+    auto flex_parent = dynamic_cast<flex_widget *>(parent);
+    bool parent_is_stretch =
+        flex_parent && flex_parent->align_items == align::stretch;
+    bool parent_is_horizontal = flex_parent && flex_parent->horizontal;
     if (auto_size) {
         if (horizontal) {
-            width->animate_to(
-                round(total_content_size + *padding_left + *padding_right));
-            height->animate_to(
-                round(max_child_height + *padding_top + *padding_bottom));
+            if (!parent_is_stretch || parent_is_horizontal)
+                width->animate_to(
+                    round(total_content_size + *padding_left + *padding_right));
+            if (!parent_is_stretch || !parent_is_horizontal)
+                height->animate_to(
+                    round(max_child_height + *padding_top + *padding_bottom));
         } else {
-            width->animate_to(
-                round(max_child_width + *padding_left + *padding_right));
-            height->animate_to(
-                round(total_content_size + *padding_top + *padding_bottom));
+            if (!parent_is_stretch || parent_is_horizontal)
+                width->animate_to(
+                    round(max_child_width + *padding_left + *padding_right));
+            if (!parent_is_stretch || !parent_is_horizontal)
+                height->animate_to(
+                    round(total_content_size + *padding_top + *padding_bottom));
         }
     }
 
