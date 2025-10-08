@@ -195,7 +195,8 @@ void ui::flex_widget::reposition_children_flex(
 
     // Set container dimensions if auto_size enabled
     // should_autosize decides if we should auto size in the main axis
-    // When horizontal is true, the main axis is width side
+    // When horizontal is true, the main axis is width side, so we check if we should auto size width by passing in true
+    // When horizontal is false, the main axis is not width side, so we check if we should auto size width by passing in false
     if (should_autosize(horizontal)) {
         width->animate_to(
             round((horizontal ? total_content_size : max_child_width) +
@@ -366,7 +367,7 @@ bool ui::flex_widget::should_autosize(bool mainAxis) const {
     //     (flex_parent->horizontal && !horizontal && mainAxis) ||
     //     (!flex_parent->horizontal && horizontal && !mainAxis))
     // simplified to:
-    if ((flex_parent->horizontal == horizontal) == mainAxis)
+    if (horizontal == mainAxis)
         return false;
     return true;
 }
