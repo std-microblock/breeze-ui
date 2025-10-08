@@ -388,8 +388,9 @@ void ui::text_widget::update(update_context &ctx) {
     widget::update(ctx);
     ctx.vg.fontSize(font_size);
     ctx.vg.fontFace(font_family.c_str());
-    auto text = max_width < 0 ? ctx.vg.measureText(this->text.c_str())
-                              : ctx.vg.measureTextBox(this->text.c_str(), max_width);
+    auto text = max_width < 0
+                    ? ctx.vg.measureText(this->text.c_str())
+                    : ctx.vg.measureTextBox(this->text.c_str(), max_width);
 
     if (shrink_horizontal) {
         width->animate_to(max_width > 0 ? std::min(text.first, max_width)

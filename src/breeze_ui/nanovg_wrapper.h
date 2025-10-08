@@ -10,9 +10,9 @@ namespace ui {
 struct NVGImage;
 struct render_target;
 struct nanovg_context {
-  NVGcontext *ctx;
-  render_target *rt;
-  // clang-format off
+    NVGcontext *ctx;
+    render_target *rt;
+    // clang-format off
   /*
   Codegen:
 
@@ -112,202 +112,205 @@ inline auto textBreakLines( const char* string, const char* end, float breakRowW
 inline auto deleteInternal() { return nvgDeleteInternal(ctx); }
 inline auto internalParams() { return nvgInternalParams(ctx); }
 inline auto debugDumpPathCache() { return nvgDebugDumpPathCache(ctx); }
-  // clang-format on
+    // clang-format on
 
-  // shortcuts
-  inline auto fillRect(float x, float y, float w, float h) {
-    beginPath();
-    rect(x, y, w, h);
-    fill();
-  }
-
-  inline auto strokeRect(float x, float y, float w, float h) {
-    beginPath();
-    rect(x, y, w, h);
-    stroke();
-  }
-
-  inline auto fillCircle(float cx, float cy, float r) {
-    beginPath();
-    circle(cx, cy, r);
-    fill();
-  }
-
-  inline auto strokeCircle(float cx, float cy, float r) {
-    beginPath();
-    circle(cx, cy, r);
-    stroke();
-  }
-
-  inline auto fillEllipse(float cx, float cy, float rx, float ry) {
-    beginPath();
-    ellipse(cx, cy, rx, ry);
-    fill();
-  }
-
-  inline auto strokeEllipse(float cx, float cy, float rx, float ry) {
-    beginPath();
-    ellipse(cx, cy, rx, ry);
-    stroke();
-  }
-
-  inline auto fillRoundedRect(float x, float y, float w, float h, float r) {
-    beginPath();
-    roundedRect(x, y, w, h, r);
-    fill();
-  }
-
-  inline auto strokeRoundedRect(float x, float y, float w, float h, float r) {
-    beginPath();
-    roundedRect(x, y, w, h, r);
-    stroke();
-  }
-
-  inline auto measureText(const char *string) {
-    float bounds[4];
-    textBounds(0, 0, string, nullptr, bounds);
-    return std::make_pair(bounds[2] - bounds[0], bounds[3] - bounds[1]);
-  }
-
-  inline auto measureTextBox(const char *string, float breakRowWidth) {
-    float bounds[4];
-    textBoxBounds(0, 0, breakRowWidth, string, nullptr, bounds);
-    return std::make_pair(bounds[2] - bounds[0], bounds[3] - bounds[1]);
-  }
-
-  inline nanovg_context with_offset(float x, float y) {
-    auto copy = *this;
-    copy.offset_x = x + offset_x;
-    copy.offset_y = y + offset_y;
-    return copy;
-  }
-
-  inline nanovg_context with_reset_offset(float x = 0, float y = 0) {
-    auto copy = *this;
-    copy.offset_x = x;
-    copy.offset_y = y;
-    return copy;
-  }
-
-  struct TransactionScope {
-    nanovg_context &ctx;
-    TransactionScope(nanovg_context &ctx) : ctx(ctx) { ctx.save(); }
-    ~TransactionScope() { ctx.restore(); }
-  };
-
-  inline TransactionScope transaction() { return TransactionScope(*this); }
-
-  inline void transaction(std::function<void()> f) {
-    save();
-    f();
-    restore();
-  }
-
-  template <typename T> inline T transaction(std::function<T()> f) {
-    save();
-    auto res = f();
-    restore();
-    return res;
-  }
-
-  inline void drawCubicBezier(float x1, float y1, float cx1, float cy1,
-                              float cx2, float cy2, float x2, float y2) {
-    beginPath();
-    moveTo(x1, y1);
-    bezierTo(cx1, cy1, cx2, cy2, x2, y2);
-    stroke();
-  }
-
-  struct NSVGimageRAII {
-    NSVGimage *image;
-    NSVGimageRAII(NSVGimage *image) : image(image) {}
-    ~NSVGimageRAII() {
-      if (image)
-        nsvgDelete(image);
+    // shortcuts
+    inline auto fillRect(float x, float y, float w, float h) {
+        beginPath();
+        rect(x, y, w, h);
+        fill();
     }
-  };
 
-  inline NVGImage imageFromSVG(NSVGimage *image, float dpi_scale = 1);
-  inline void drawSVG(NSVGimage *image, float x, float y, float width,
-                      float height) {
-    auto orig_width = image->width, orig_height = image->height;
-    x += offset_x;
-    y += offset_y;
-    for (auto shape = image->shapes; shape != NULL; shape = shape->next) {
-      for (auto path = shape->paths; path != NULL; path = path->next) {
-        for (int i = 0; i < path->npts - 1; i += 3) {
-          float *p = &path->pts[i * 2];
+    inline auto strokeRect(float x, float y, float w, float h) {
+        beginPath();
+        rect(x, y, w, h);
+        stroke();
+    }
 
-          drawCubicBezier(
-              p[0] * width / orig_width + x, p[1] * height / orig_height + y,
-              p[2] * width / orig_width + x, p[3] * height / orig_height + y,
-              p[4] * width / orig_width + x, p[5] * height / orig_height + y,
-              p[6] * width / orig_width + x, p[7] * height / orig_height + y);
+    inline auto fillCircle(float cx, float cy, float r) {
+        beginPath();
+        circle(cx, cy, r);
+        fill();
+    }
+
+    inline auto strokeCircle(float cx, float cy, float r) {
+        beginPath();
+        circle(cx, cy, r);
+        stroke();
+    }
+
+    inline auto fillEllipse(float cx, float cy, float rx, float ry) {
+        beginPath();
+        ellipse(cx, cy, rx, ry);
+        fill();
+    }
+
+    inline auto strokeEllipse(float cx, float cy, float rx, float ry) {
+        beginPath();
+        ellipse(cx, cy, rx, ry);
+        stroke();
+    }
+
+    inline auto fillRoundedRect(float x, float y, float w, float h, float r) {
+        beginPath();
+        roundedRect(x, y, w, h, r);
+        fill();
+    }
+
+    inline auto strokeRoundedRect(float x, float y, float w, float h, float r) {
+        beginPath();
+        roundedRect(x, y, w, h, r);
+        stroke();
+    }
+
+    inline auto measureText(const char *string) {
+        float bounds[4];
+        textBounds(0, 0, string, nullptr, bounds);
+        return std::make_pair(bounds[2] - bounds[0], bounds[3] - bounds[1]);
+    }
+
+    inline auto measureTextBox(const char *string, float breakRowWidth) {
+        float bounds[4];
+        textBoxBounds(0, 0, breakRowWidth, string, nullptr, bounds);
+        return std::make_pair(bounds[2] - bounds[0], bounds[3] - bounds[1]);
+    }
+
+    inline nanovg_context with_offset(float x, float y) {
+        auto copy = *this;
+        copy.offset_x = x + offset_x;
+        copy.offset_y = y + offset_y;
+        return copy;
+    }
+
+    inline nanovg_context with_reset_offset(float x = 0, float y = 0) {
+        auto copy = *this;
+        copy.offset_x = x;
+        copy.offset_y = y;
+        return copy;
+    }
+
+    struct TransactionScope {
+        nanovg_context &ctx;
+        TransactionScope(nanovg_context &ctx) : ctx(ctx) { ctx.save(); }
+        ~TransactionScope() { ctx.restore(); }
+    };
+
+    inline TransactionScope transaction() { return TransactionScope(*this); }
+
+    inline void transaction(std::function<void()> f) {
+        save();
+        f();
+        restore();
+    }
+
+    template <typename T> inline T transaction(std::function<T()> f) {
+        save();
+        auto res = f();
+        restore();
+        return res;
+    }
+
+    inline void drawCubicBezier(float x1, float y1, float cx1, float cy1,
+                                float cx2, float cy2, float x2, float y2) {
+        beginPath();
+        moveTo(x1, y1);
+        bezierTo(cx1, cy1, cx2, cy2, x2, y2);
+        stroke();
+    }
+
+    struct NSVGimageRAII {
+        NSVGimage *image;
+        NSVGimageRAII(NSVGimage *image) : image(image) {}
+        ~NSVGimageRAII() {
+            if (image)
+                nsvgDelete(image);
         }
-      }
+    };
+
+    inline NVGImage imageFromSVG(NSVGimage *image, float dpi_scale = 1);
+    inline void drawSVG(NSVGimage *image, float x, float y, float width,
+                        float height) {
+        auto orig_width = image->width, orig_height = image->height;
+        x += offset_x;
+        y += offset_y;
+        for (auto shape = image->shapes; shape != NULL; shape = shape->next) {
+            for (auto path = shape->paths; path != NULL; path = path->next) {
+                for (int i = 0; i < path->npts - 1; i += 3) {
+                    float *p = &path->pts[i * 2];
+
+                    drawCubicBezier(p[0] * width / orig_width + x,
+                                    p[1] * height / orig_height + y,
+                                    p[2] * width / orig_width + x,
+                                    p[3] * height / orig_height + y,
+                                    p[4] * width / orig_width + x,
+                                    p[5] * height / orig_height + y,
+                                    p[6] * width / orig_width + x,
+                                    p[7] * height / orig_height + y);
+                }
+            }
+        }
     }
-  }
 
-  inline void drawSVG(NSVGimageRAII &image, float x, float y, float width,
-                      float height) {
-    drawSVG(image.image, x, y, width, height);
-  }
+    inline void drawSVG(NSVGimageRAII &image, float x, float y, float width,
+                        float height) {
+        drawSVG(image.image, x, y, width, height);
+    }
 
-  inline void drawImage(const NVGImage &image, float x, float y, float width,
-                        float height, float rounding = 0, float alpha = 1);
+    inline void drawImage(const NVGImage &image, float x, float y, float width,
+                          float height, float rounding = 0, float alpha = 1);
 };
 
 struct GLTexture {
-  GLuint id;
-  int width, height;
+    GLuint id;
+    int width, height;
 
-  inline GLTexture(GLuint id, int width, int height)
-      : id(id), width(width), height(height) {}
+    inline GLTexture(GLuint id, int width, int height)
+        : id(id), width(width), height(height) {}
 
-  GLTexture(GLTexture &&other) = default;
-  GLTexture &operator=(GLTexture &&other) = default;
+    GLTexture(GLTexture &&other) = default;
+    GLTexture &operator=(GLTexture &&other) = default;
 
-  inline ~GLTexture() { glDeleteTextures(1, &id); }
+    inline ~GLTexture() { glDeleteTextures(1, &id); }
 };
 
 struct NVGImage {
-  int id;
-  int width, height;
-  nanovg_context ctx;
+    int id;
+    int width, height;
+    nanovg_context ctx;
 
-  inline NVGImage(int id, int width, int height, nanovg_context ctx)
-      : id(id), width(width), height(height), ctx(ctx) {}
+    inline NVGImage(int id, int width, int height, nanovg_context ctx)
+        : id(id), width(width), height(height), ctx(ctx) {}
 
-  NVGImage(NVGImage &&other) = default;
-  NVGImage &operator=(NVGImage &&other) = default;
+    NVGImage(NVGImage &&other) = default;
+    NVGImage &operator=(NVGImage &&other) = default;
 
-  inline ~NVGImage() {
-    // if (id != -1)
-    //   ctx.deleteImage(id);
-  }
+    inline ~NVGImage() {
+        // if (id != -1)
+        //   ctx.deleteImage(id);
+    }
 };
 
 inline void nanovg_context::drawImage(const NVGImage &image, float x, float y,
                                       float width, float height, float rounding,
                                       float alpha) {
-  if (image.id == -1)
-    return;
-  beginPath();
-  roundedRect(x, y, width, height, rounding);
-  fillPaint(imagePattern(x, y, width, height, 0, image.id, alpha));
-  fill();
+    if (image.id == -1)
+        return;
+    beginPath();
+    roundedRect(x, y, width, height, rounding);
+    fillPaint(imagePattern(x, y, width, height, 0, image.id, alpha));
+    fill();
 }
 
 NVGImage nanovg_context::imageFromSVG(NSVGimage *image, float dpi_scale) {
-  thread_local static auto rast = nsvgCreateRasterizer();
-  auto width = image->width, height = image->height;
-  width *= dpi_scale, height *= dpi_scale;
+    thread_local static auto rast = nsvgCreateRasterizer();
+    auto width = image->width, height = image->height;
+    width *= dpi_scale, height *= dpi_scale;
 
-  auto data = (unsigned char *)malloc(width * height * 4);
-  nsvgRasterize(rast, image, 0, 0, dpi_scale, data, width, height, width * 4);
-  auto id = createImageRGBA(width, height, 0, data);
-  free(data);
-  return NVGImage(id, width, height, *this);
+    auto data = (unsigned char *)malloc(width * height * 4);
+    nsvgRasterize(rast, image, 0, 0, dpi_scale, data, width, height, width * 4);
+    auto id = createImageRGBA(width, height, 0, data);
+    free(data);
+    return NVGImage(id, width, height, *this);
 }
 
 } // namespace ui

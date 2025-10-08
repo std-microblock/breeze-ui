@@ -6,7 +6,6 @@
 #include <mutex>
 #include <thread>
 
-
 namespace ui {
 
 struct rect_widget : public widget {

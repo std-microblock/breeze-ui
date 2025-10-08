@@ -230,12 +230,7 @@ struct flex_widget : public widget {
         space_evenly
     };
 
-    enum class align {
-        start,
-        end,
-        center,
-        stretch
-    };
+    enum class align { start, end, center, stretch };
 
     float gap = 0;
     bool horizontal = false;

@@ -17,36 +17,36 @@
 // 0x6, Constant, Type: int, ACCENT_INVALID_STATE
 enum ACCENT_STATE : INT { // Affects the rendering of the background of a
                           // window.
-  ACCENT_DISABLED = 0,    // Default value. Background is black.
-  ACCENT_ENABLE_GRADIENT =
-      1, // Background is GradientColor, alpha channel ignored.
-  ACCENT_ENABLE_TRANSPARENTGRADIENT = 2, // Background is GradientColor.
-  ACCENT_ENABLE_BLURBEHIND =
-      3, // Background is GradientColor, with blur effect.
-  ACCENT_ENABLE_ACRYLICBLURBEHIND =
-      4, // Background is GradientColor, with acrylic blur effect.
-  ACCENT_ENABLE_HOSTBACKDROP = 5, // Unknown.
-  ACCENT_INVALID_STATE =
-      6 // Unknown. Seems to draw background fully transparent.
+    ACCENT_DISABLED = 0,  // Default value. Background is black.
+    ACCENT_ENABLE_GRADIENT =
+        1, // Background is GradientColor, alpha channel ignored.
+    ACCENT_ENABLE_TRANSPARENTGRADIENT = 2, // Background is GradientColor.
+    ACCENT_ENABLE_BLURBEHIND =
+        3, // Background is GradientColor, with blur effect.
+    ACCENT_ENABLE_ACRYLICBLURBEHIND =
+        4, // Background is GradientColor, with acrylic blur effect.
+    ACCENT_ENABLE_HOSTBACKDROP = 5, // Unknown.
+    ACCENT_INVALID_STATE =
+        6 // Unknown. Seems to draw background fully transparent.
 };
 
 enum Flags : UINT {
-  NoneBorder = 0x00,
-  GradientColor = 0x02,
-  Luminosity = 0x02,
-  LeftBorder = 0x20,
-  TopBorder = 0x40,
-  RightBorder = 0x80,
-  BottomBorder = 0x100,
-  AllBorder = (LeftBorder | TopBorder | RightBorder | BottomBorder),
+    NoneBorder = 0x00,
+    GradientColor = 0x02,
+    Luminosity = 0x02,
+    LeftBorder = 0x20,
+    TopBorder = 0x40,
+    RightBorder = 0x80,
+    BottomBorder = 0x100,
+    AllBorder = (LeftBorder | TopBorder | RightBorder | BottomBorder),
 
-  AllowSetWindowRgn = 0x10, // 0x10, 0xFE; 16, 25, 140
-  FullScreen = 0xFF,
-  FullScreen1 = 0xFFFFFFFF
+    AllowSetWindowRgn = 0x10, // 0x10, 0xFE; 16, 25, 140
+    FullScreen = 0xFF,
+    FullScreen1 = 0xFFFFFFFF
 };
 
 inline constexpr DWORD ARGB(DWORD a, DWORD r, DWORD g, DWORD b) {
-  return (a << 24) | (r << 16) | (g << 8) | b;
+    return (a << 24) | (r << 16) | (g << 8) | b;
 }
 
 // UserDefinedType: ACCENT_POLICY
@@ -54,12 +54,12 @@ inline constexpr DWORD ARGB(DWORD a, DWORD r, DWORD g, DWORD b) {
 // Data           :   this+0x4, Member, Type: unsigned int, AccentFlags
 // Data           :   this+0x8, Member, Type: unsigned long, GradientColor
 // Data           :   this+0xC, Member, Type: long, AnimationId
-struct ACCENT_POLICY {      // Determines how a window's background is rendered.
-  ACCENT_STATE AccentState; // Background effect.
-  UINT AccentFlags; // Flags. Set to 2 to tell GradientColor is used, rest is
-                    // unknown.
-  COLORREF GradientColor; // Background color.
-  LONG AnimationId;       // Unknown
+struct ACCENT_POLICY { // Determines how a window's background is rendered.
+    ACCENT_STATE AccentState; // Background effect.
+    UINT AccentFlags; // Flags. Set to 2 to tell GradientColor is used, rest is
+                      // unknown.
+    COLORREF GradientColor; // Background color.
+    LONG AnimationId;       // Unknown
 };
 
 // Enum           : WINDOWCOMPOSITIONATTRIB, Type: int
@@ -93,8 +93,8 @@ struct ACCENT_POLICY {      // Determines how a window's background is rendered.
 // Constant, Type: int, WCA_LAST
 enum WINDOWCOMPOSITIONATTRIB : INT { // Determines what attribute is being
                                      // manipulated.
-  WCA_ACCENT_POLICY =
-      0x13 // The attribute being get or set is an accent policy.
+    WCA_ACCENT_POLICY =
+        0x13 // The attribute being get or set is an accent policy.
 };
 
 // UserDefinedType: tagWINDOWCOMPOSITIONATTRIBDATA
@@ -103,10 +103,10 @@ enum WINDOWCOMPOSITIONATTRIB : INT { // Determines what attribute is being
 // this+0x10, Member, Type: unsigned int, cbData
 struct WINDOWCOMPOSITIONATTRIBDATA { // Options for
                                      // [Get/Set]WindowCompositionAttribute.
-  WINDOWCOMPOSITIONATTRIB Attrib;    // Type of what is being get or set.
-  LPVOID pvData; // Pointer to memory that will receive what is get or that
-                 // contains what will be set.
-  UINT cbData;   // Size of the data being pointed to by pvData.
+    WINDOWCOMPOSITIONATTRIB Attrib;  // Type of what is being get or set.
+    LPVOID pvData; // Pointer to memory that will receive what is get or that
+                   // contains what will be set.
+    UINT cbData;   // Size of the data being pointed to by pvData.
 };
 
 typedef BOOL(WINAPI *PFN_SET_WINDOW_COMPOSITION_ATTRIBUTE)(
