@@ -195,8 +195,10 @@ void ui::flex_widget::reposition_children_flex(
 
     // Set container dimensions if auto_size enabled
     // should_autosize decides if we should auto size in the main axis
-    // When horizontal is true, the main axis is width side, so we check if we should auto size width by passing in true
-    // When horizontal is false, the main axis is not width side, so we check if we should auto size width by passing in false
+    // When horizontal is true, the main axis is width side, so we check if we
+    // should auto size width by passing in true When horizontal is false, the
+    // main axis is not width side, so we check if we should auto size width by
+    // passing in false
     if (should_autosize(horizontal)) {
         width->animate_to(
             round((horizontal ? total_content_size : max_child_width) +
@@ -325,26 +327,18 @@ void ui::flex_widget::reposition_children_flex(
 }
 
 float ui::flex_widget::measure_height(update_context &ctx) {
-    if (should_autosize(!horizontal)) {
-        float max_height = 0;
-        for (auto &child : children) {
-            max_height = std::max(max_height, child->measure_height(ctx));
-        }
-        return max_height + *padding_top + *padding_bottom;
-    } else {
-        return height->dest();
+    float max_height = 0;
+    for (auto &child : children) {
+        max_height = std::max(max_height, child->measure_height(ctx));
     }
+    return max_height + *padding_top + *padding_bottom;
 }
 float ui::flex_widget::measure_width(update_context &ctx) {
-    if (should_autosize(horizontal)) {
-        float max_width = 0;
-        for (auto &child : children) {
-            max_width = std::max(max_width, child->measure_width(ctx));
-        }
-        return max_width + *padding_left + *padding_right;
-    } else {
-        return width->dest();
+    float max_width = 0;
+    for (auto &child : children) {
+        max_width = std::max(max_width, child->measure_width(ctx));
     }
+    return max_width + *padding_left + *padding_right;
 }
 
 bool ui::flex_widget::should_autosize(bool mainAxis) const {

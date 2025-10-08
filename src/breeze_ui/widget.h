@@ -161,6 +161,9 @@ struct widget : std::enable_shared_from_this<widget> {
     virtual void render(nanovg_context ctx);
     virtual void update(update_context &ctx);
     virtual ~widget() = default;
+    // Measure the desired size of the widget
+    // It should return the size it wants to be, not the size it is forced to be
+    // by the parent
     virtual float measure_height(update_context &ctx);
     virtual float measure_width(update_context &ctx);
     // Update children with the offset.
