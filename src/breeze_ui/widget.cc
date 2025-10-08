@@ -192,23 +192,23 @@ void ui::flex_widget::reposition_children_flex(
             }
         }
     }
-
+    
+    float gap_space = (children_rev.size() - 1) * gap;
     // Calculate spacer size if needed
     float spacer_size = 0;
     if (spacer_count > 0 && !should_autosize(true)) {
         float available_space =
             horizontal ? (width->dest() - *padding_left - *padding_right)
                        : (height->dest() - *padding_top - *padding_bottom);
-        float gap_space = (children_rev.size() - 1) * gap;
+
         spacer_size =
             std::max(0.0f, (available_space - total_fixed_size - gap_space) /
                                spacer_count);
     }
 
     // Calculate total content size (including gaps and spacers)
-    float total_content_size = total_fixed_size +
-                               (children_rev.size() - 1) * gap +
-                               spacer_count * spacer_size;
+    float total_content_size =
+        total_fixed_size + gap_space + spacer_count * spacer_size;
 
     // Set container dimensions if auto_size enabled
     // should_autosize decides if we should auto size in the main axis
@@ -301,16 +301,16 @@ void ui::flex_widget::reposition_children_flex(
         initial_offset = remaining_space / 2;
         break;
     case justify::space_between:
-        if (children_rev.size() > 1) {
-            effective_gap += remaining_space / (children_rev.size() - 1);
+        if (children.size() > 1) {
+            effective_gap += remaining_space / (children.size() - 1);
         }
         break;
     case justify::space_around:
-        effective_gap += remaining_space / children_rev.size();
+        effective_gap += remaining_space / children.size();
         initial_offset = effective_gap / 2;
         break;
     case justify::space_evenly:
-        effective_gap += remaining_space / (children_rev.size() + 1);
+        effective_gap += remaining_space / (children.size() + 1);
         initial_offset = effective_gap;
         break;
     case justify::start:
@@ -347,7 +347,7 @@ float ui::flex_widget::measure_height(update_context &ctx) {
     if (!auto_size) {
         return height->dest();
     }
-    
+
     if (horizontal) {
         float max_height = 0;
         for (auto &child : children) {
