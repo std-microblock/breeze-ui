@@ -327,6 +327,10 @@ void ui::flex_widget::reposition_children_flex(
 }
 
 float ui::flex_widget::measure_height(update_context &ctx) {
+    if (!auto_size) {
+        return height->dest();
+    }
+    
     if (horizontal) {
         float max_height = 0;
         for (auto &child : children) {
@@ -343,6 +347,10 @@ float ui::flex_widget::measure_height(update_context &ctx) {
     }
 }
 float ui::flex_widget::measure_width(update_context &ctx) {
+    if (!auto_size) {
+        return width->dest();
+    }
+
     if (horizontal) {
         float total_width = 0;
         for (auto &child : children) {
