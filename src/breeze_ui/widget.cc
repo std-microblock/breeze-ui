@@ -430,7 +430,7 @@ bool ui::flex_widget::should_autosize(bool mainAxis) const {
     // For flex_grow > 0, the side of parent's main axis should be determined by
     // parent
     if (flex_grow > 0)
-        return (mainAxis == horizontal) == flex_parent->horizontal;
+        return (mainAxis == horizontal) != flex_parent->horizontal;
 
     return true;
 }
