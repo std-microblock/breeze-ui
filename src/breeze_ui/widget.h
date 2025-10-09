@@ -247,7 +247,7 @@ struct flex_widget : public widget {
     float max_height = INFINITY;
     bool enable_scrolling = false;
     sp_anim_float scroll_top =
-        anim_float(0, 200, easing_type::ease_in_out, "scroll_top");
+        anim_float(0, 150, easing_type::ease_in_out);
     NVGcolor scroll_bar_color = nvgRGBA(200, 200, 200, 128);
     float scroll_bar_width = 6;
     float scroll_bar_margin = 2;
