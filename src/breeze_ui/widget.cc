@@ -164,9 +164,9 @@ void ui::flex_widget::reposition_children_flex(
     update_context &ctx, std::vector<std::shared_ptr<widget>> &children) {
     float x = *padding_left, y = *padding_top;
 
-    constexpr bool round_position = true;
-    auto round = [](float value) {
-        return round_position ? std::round(value) : value;
+    constexpr bool floor_position = true;
+    auto r = [](float value) {
+        return floor_position ? std::floor(value) : value;
     };
 
     auto children_rev =
@@ -232,13 +232,13 @@ void ui::flex_widget::reposition_children_flex(
     // passing in false
     if (should_autosize(horizontal)) {
         width->animate_to(
-            round((horizontal ? total_content_size : max_child_width) +
+            r((horizontal ? total_content_size : max_child_width) +
                   *padding_left + *padding_right));
     }
 
     if (should_autosize(!horizontal)) {
         height->animate_to(
-            round((horizontal ? max_child_height : total_content_size) +
+            r((horizontal ? max_child_height : total_content_size) +
                   *padding_top + *padding_bottom));
     }
 
@@ -263,18 +263,18 @@ void ui::flex_widget::reposition_children_flex(
             switch (align_items) {
             case align::center:
                 child->y->animate_to(
-                    round(y + (container_height - cached_height) / 2));
+                    r(y + (container_height - cached_height) / 2));
                 break;
             case align::end:
                 child->y->animate_to(
-                    round(y + container_height - cached_height));
+                    r(y + container_height - cached_height));
                 break;
             case align::stretch:
-                child->height->animate_to(round(container_height));
-                child->y->animate_to(round(y));
+                child->height->animate_to(r(container_height));
+                child->y->animate_to(r(y));
                 break;
             case align::start:
-                child->y->animate_to(round(y));
+                child->y->animate_to(r(y));
                 break;
             default:
                 break;
@@ -283,20 +283,20 @@ void ui::flex_widget::reposition_children_flex(
             switch (align_items) {
             case align::center:
                 child->x->animate_to(
-                    round(x + (container_width - cached_width) / 2));
+                    r(x + (container_width - cached_width) / 2));
                 break;
             case align::end:
-                child->x->animate_to(round(x + container_width - cached_width));
+                child->x->animate_to(r(x + container_width - cached_width));
                 break;
             case align::stretch:
-                child->width->animate_to(round(container_width));
+                child->width->animate_to(r(container_width));
                 if (auto tw = dynamic_cast<text_widget *>(child.get())) {
                     tw->max_width = container_width;
                 }
-                child->x->animate_to(round(x));
+                child->x->animate_to(r(x));
                 break;
             case align::start:
-                child->x->animate_to(round(x));
+                child->x->animate_to(r(x));
                 break;
             default:
                 break;
@@ -345,7 +345,7 @@ void ui::flex_widget::reposition_children_flex(
         x += initial_offset;
         for (size_t i = 0; i < children_rev.size(); ++i) {
             auto &child = children_rev[i];
-            child->x->animate_to(round(x));
+            child->x->animate_to(r(x));
 
             float child_base_size = dynamic_cast<const spacer *>(child.get())
                                         ? spacer_size
@@ -358,7 +358,7 @@ void ui::flex_widget::reposition_children_flex(
                              flex_space_to_distribute;
                 if (horizontal) {
                     child->width->animate_to(
-                        round(child_base_size + flex_extra));
+                        r(child_base_size + flex_extra));
                 }
             }
 
@@ -369,7 +369,7 @@ void ui::flex_widget::reposition_children_flex(
         y += initial_offset;
         for (size_t i = 0; i < children_rev.size(); ++i) {
             auto &child = children_rev[i];
-            child->y->animate_to(round(y));
+            child->y->animate_to(r(y));
 
             float child_base_size = dynamic_cast<const spacer *>(child.get())
                                         ? spacer_size
@@ -382,7 +382,7 @@ void ui::flex_widget::reposition_children_flex(
                              flex_space_to_distribute;
                 if (!horizontal) {
                     child->height->animate_to(
-                        round(child_base_size + flex_extra));
+                        r(child_base_size + flex_extra));
                 }
             }
 
