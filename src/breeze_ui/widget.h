@@ -2,6 +2,7 @@
 #include "breeze_ui/animator.h"
 #include "breeze_ui/nanovg_wrapper.h"
 
+#include <cmath>
 #include <functional>
 #include <memory>
 #include <vector>
@@ -242,6 +243,17 @@ struct flex_widget : public widget {
 
     enum class align { start, end, center, stretch, free };
 
+    // Scrolling stuff
+    float max_height = INFINITY;
+    bool enable_scrolling = false;
+    sp_anim_float scroll_top = anim_float(0, 100, "scroll_top");
+    NVGcolor scroll_bar_color = nvgRGBA(200, 200, 200, 128);
+    float scroll_bar_width = 6;
+    float scroll_bar_margin = 2;
+    float scroll_bar_radius = 3;
+    float actual_height = 0;
+
+    bool crop_overflow = true;
     float gap = 0;
     bool horizontal = false;
     bool auto_size = true;
@@ -254,6 +266,7 @@ struct flex_widget : public widget {
     reposition_children_flex(update_context &ctx,
                              std::vector<std::shared_ptr<widget>> &children);
     void update(update_context &ctx) override;
+    void render(nanovg_context ctx) override;
 
     float measure_height(update_context &ctx) override;
     float measure_width(update_context &ctx) override;

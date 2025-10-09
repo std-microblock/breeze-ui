@@ -128,9 +128,38 @@ bool ui::update_context::hovered(widget *w, bool hittest) const {
 float ui::widget::measure_height(update_context &ctx) { return height->dest(); }
 float ui::widget::measure_width(update_context &ctx) { return width->dest(); }
 void ui::flex_widget::update(update_context &ctx) {
-    widget::update(ctx);
-    auto forkctx = ctx.with_offset(*x, *y);
-    reposition_children_flex(forkctx, children);
+    if (ctx.hovered(this) && enable_scrolling) {
+        scroll_top->animate_to(
+            std::clamp(scroll_top->dest() + ctx.scroll_y * 100,
+                       height->dest() - actual_height, 0.f));
+    }
+    auto forkctx = ctx.with_offset(0, *scroll_top);
+    widget::update(forkctx);
+
+    auto forkctx2 = ctx.with_offset(*x, *y + *scroll_top);
+    reposition_children_flex(forkctx2, children);
+
+    actual_height = height->dest();
+    if (max_height < actual_height)
+        height->reset_to(max_height);
+}
+void ui::flex_widget::render(nanovg_context ctx) {
+    auto t = ctx.transaction();
+    if (crop_overflow)
+        ctx.scissor(*x, *y, *width, *height);
+    widget::render(ctx.with_offset(0, *scroll_top));
+
+    if (enable_scrolling && actual_height > height->dest()) {
+        float scroll_bar_height =
+            std::max((height->dest() / actual_height) * height->dest(), 20.0f);
+        float scroll_bar_x = *x + *width - scroll_bar_width - scroll_bar_margin;
+        float scroll_bar_y = *y + (-*scroll_top / actual_height) *
+                                         (height->dest() - scroll_bar_height);
+
+        ctx.fillColor(scroll_bar_color);
+        ctx.fillRoundedRect(scroll_bar_x, scroll_bar_y, scroll_bar_width,
+                            scroll_bar_height, scroll_bar_radius);
+    }
 }
 void ui::flex_widget::reposition_children_flex(
     update_context &ctx, std::vector<std::shared_ptr<widget>> &children) {
