@@ -409,7 +409,7 @@ bool ui::flex_widget::should_autosize(bool mainAxis) const {
     auto flex_parent = dynamic_cast<flex_widget *>(parent);
     if (!flex_parent)
         return true;
-    if (flex_parent->align_items != align::stretch)
+    if (flex_parent->align_items != align::stretch && flex_grow == 0)
         return true;
     // If the parent is horizontal and is stretching, do not auto size in the
     // cross axis of the parent
