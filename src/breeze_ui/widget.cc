@@ -150,15 +150,14 @@ void ui::flex_widget::render(nanovg_context ctx) {
     widget::render(ctx.with_offset(0, *scroll_top));
 
     if (enable_scrolling && actual_height > height->dest()) {
-        float scroll_bar_height =
-            std::max((height->dest() / actual_height) * height->dest(), 20.0f);
-        float scroll_bar_x = *x + *width - scroll_bar_width - scroll_bar_margin;
-        float scroll_bar_y = *y + (-*scroll_top / actual_height) *
-                                         (height->dest() - scroll_bar_height);
+        auto scrollbar_height = height->dest() * height->dest() / actual_height;
+        auto scrollbar_x = width->dest() - scroll_bar_width - 2 + *x;
+        auto scrollbar_y = *y - *scroll_top / (actual_height - height->dest()) *
+                                    (height->dest() - scrollbar_height);
 
         ctx.fillColor(scroll_bar_color);
-        ctx.fillRoundedRect(scroll_bar_x, scroll_bar_y, scroll_bar_width,
-                            scroll_bar_height, scroll_bar_radius);
+        ctx.fillRoundedRect(scrollbar_x, scrollbar_y, scroll_bar_width,
+                            scrollbar_height, scroll_bar_radius);
     }
 }
 void ui::flex_widget::reposition_children_flex(

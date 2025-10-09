@@ -29,6 +29,10 @@ struct animated_float {
         : name(name), destination(destination) {}
     animated_float(float destination, float duration, std::string name)
         : name(name), duration(duration), destination(destination) {}
+    animated_float(float destination, float duration, easing_type easing,
+                   std::string name)
+        : easing(easing), name(name), duration(duration),
+          destination(destination) {}
     animated_float(std::string name) : name(name) {}
     std::optional<std::function<void(float)>> before_animate = {};
     std::optional<std::function<void(float)>> after_animate = {};
