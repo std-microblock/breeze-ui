@@ -236,10 +236,11 @@ struct flex_widget : public widget {
         center,
         space_between,
         space_around,
-        space_evenly
+        space_evenly,
+        free
     };
 
-    enum class align { start, end, center, stretch };
+    enum class align { start, end, center, stretch, free };
 
     float gap = 0;
     bool horizontal = false;
