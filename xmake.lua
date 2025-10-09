@@ -21,3 +21,9 @@ target("breeze_ui")
         public = true
     })
     set_encodings("utf-8")
+
+target("flex_grow_test")
+    set_kind("binary")
+    add_deps("breeze_ui")
+    add_files("src/test/flex_grow_test.cc")
+    add_includedirs("src/")

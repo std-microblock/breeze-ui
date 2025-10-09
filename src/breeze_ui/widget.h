@@ -129,6 +129,9 @@ struct widget : std::enable_shared_from_this<widget> {
     sp_anim_float x = anim_float("x"), y = anim_float("y"),
                   width = anim_float("width"), height = anim_float("height");
 
+    // Flex grow factor (0 means no growing)
+    float flex_grow = 0.0f;
+
     float _debug_offset_cache[2];
     bool enable_child_clipping = false;
     bool needs_repaint = true;

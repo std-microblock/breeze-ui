@@ -154,9 +154,10 @@ void ui::flex_widget::reposition_children_flex(
     std::vector<std::pair<float, float>> measure_cache;
     measure_cache.reserve(children_rev.size());
 
-    // Pass 1: Measure all children
+    // Pass 1: Measure all children and calculate total flex grow
     float max_child_width = 0, max_child_height = 0;
     float total_fixed_size = 0;
+    float total_flex_grow = 0.0f;
 
     for (auto &child : children_rev) {
         float child_width = child->measure_width(ctx);
@@ -167,11 +168,13 @@ void ui::flex_widget::reposition_children_flex(
             max_child_height = std::max(max_child_height, child_height);
             if (!dynamic_cast<const spacer *>(child.get())) {
                 total_fixed_size += child_width;
+                total_flex_grow += child->flex_grow;
             }
         } else {
             max_child_width = std::max(max_child_width, child_width);
             if (!dynamic_cast<const spacer *>(child.get())) {
                 total_fixed_size += child_height;
+                total_flex_grow += child->flex_grow;
             }
         }
     }
@@ -304,15 +307,32 @@ void ui::flex_widget::reposition_children_flex(
         break;
     }
 
+    // Calculate space to distribute among flex-growing children
+    float flex_space_to_distribute = 0.0f;
+    if (total_flex_grow > 0.0f && remaining_space > 0.0f) {
+        flex_space_to_distribute = remaining_space;
+    }
+
     if (horizontal) {
         x += initial_offset;
         for (size_t i = 0; i < children_rev.size(); ++i) {
             auto &child = children_rev[i];
             child->x->animate_to(round(x));
 
-            float child_size = dynamic_cast<const spacer *>(child.get())
-                                   ? spacer_size
-                                   : measure_cache[i].first;
+            float child_base_size = dynamic_cast<const spacer *>(child.get())
+                                       ? spacer_size
+                                       : measure_cache[i].first;
+            
+            // Apply flex grow if this child can grow
+            float flex_extra = 0.0f;
+            if (child->flex_grow > 0.0f && total_flex_grow > 0.0f) {
+                flex_extra = (child->flex_grow / total_flex_grow) * flex_space_to_distribute;
+                if (horizontal) {
+                    child->width->animate_to(round(child_base_size + flex_extra));
+                }
+            }
+            
+            float child_size = child_base_size + flex_extra;
             x += child_size + effective_gap;
         }
     } else {
@@ -321,9 +341,20 @@ void ui::flex_widget::reposition_children_flex(
             auto &child = children_rev[i];
             child->y->animate_to(round(y));
 
-            float child_size = dynamic_cast<const spacer *>(child.get())
-                                   ? spacer_size
-                                   : measure_cache[i].second;
+            float child_base_size = dynamic_cast<const spacer *>(child.get())
+                                       ? spacer_size
+                                       : measure_cache[i].second;
+            
+            // Apply flex grow if this child can grow
+            float flex_extra = 0.0f;
+            if (child->flex_grow > 0.0f && total_flex_grow > 0.0f) {
+                flex_extra = (child->flex_grow / total_flex_grow) * flex_space_to_distribute;
+                if (!horizontal) {
+                    child->height->animate_to(round(child_base_size + flex_extra));
+                }
+            }
+            
+            float child_size = child_base_size + flex_extra;
             y += child_size + effective_gap;
         }
     }
