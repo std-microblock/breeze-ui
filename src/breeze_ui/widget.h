@@ -254,7 +254,7 @@ struct flex_widget : public widget {
     float scroll_bar_radius = 3;
     float actual_height = 0;
 
-    bool crop_overflow = true;
+    bool crop_overflow = false;
     float gap = 0;
     bool horizontal = false;
     bool auto_size = true;

@@ -145,7 +145,7 @@ void ui::flex_widget::update(update_context &ctx) {
 }
 void ui::flex_widget::render(nanovg_context ctx) {
     auto t = ctx.transaction();
-    if (crop_overflow)
+    if (crop_overflow || enable_scrolling)
         ctx.scissor(*x, *y, *width, *height);
     widget::render(ctx.with_offset(0, *scroll_top));
 
