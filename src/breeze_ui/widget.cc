@@ -320,18 +320,20 @@ void ui::flex_widget::reposition_children_flex(
             child->x->animate_to(round(x));
 
             float child_base_size = dynamic_cast<const spacer *>(child.get())
-                                       ? spacer_size
-                                       : measure_cache[i].first;
-            
+                                        ? spacer_size
+                                        : measure_cache[i].first;
+
             // Apply flex grow if this child can grow
             float flex_extra = 0.0f;
             if (child->flex_grow > 0.0f && total_flex_grow > 0.0f) {
-                flex_extra = (child->flex_grow / total_flex_grow) * flex_space_to_distribute;
+                flex_extra = (child->flex_grow / total_flex_grow) *
+                             flex_space_to_distribute;
                 if (horizontal) {
-                    child->width->animate_to(round(child_base_size + flex_extra));
+                    child->width->animate_to(
+                        round(child_base_size + flex_extra));
                 }
             }
-            
+
             float child_size = child_base_size + flex_extra;
             x += child_size + effective_gap;
         }
@@ -342,18 +344,20 @@ void ui::flex_widget::reposition_children_flex(
             child->y->animate_to(round(y));
 
             float child_base_size = dynamic_cast<const spacer *>(child.get())
-                                       ? spacer_size
-                                       : measure_cache[i].second;
-            
+                                        ? spacer_size
+                                        : measure_cache[i].second;
+
             // Apply flex grow if this child can grow
             float flex_extra = 0.0f;
             if (child->flex_grow > 0.0f && total_flex_grow > 0.0f) {
-                flex_extra = (child->flex_grow / total_flex_grow) * flex_space_to_distribute;
+                flex_extra = (child->flex_grow / total_flex_grow) *
+                             flex_space_to_distribute;
                 if (!horizontal) {
-                    child->height->animate_to(round(child_base_size + flex_extra));
+                    child->height->animate_to(
+                        round(child_base_size + flex_extra));
                 }
             }
-            
+
             float child_size = child_base_size + flex_extra;
             y += child_size + effective_gap;
         }
@@ -409,8 +413,6 @@ bool ui::flex_widget::should_autosize(bool mainAxis) const {
     auto flex_parent = dynamic_cast<flex_widget *>(parent);
     if (!flex_parent)
         return true;
-    if (flex_parent->align_items != align::stretch && flex_grow == 0)
-        return true;
     // If the parent is horizontal and is stretching, do not auto size in the
     // cross axis of the parent
     // When the parent is horizontal, the cross axis is vertical
@@ -422,7 +424,15 @@ bool ui::flex_widget::should_autosize(bool mainAxis) const {
     //     (!flex_parent->horizontal && horizontal && !mainAxis))
     //         return true;
     // simplified to:
-    return horizontal != mainAxis;
+    if (flex_parent->align_items == align::stretch)
+        return horizontal != mainAxis;
+
+    // For flex_grow > 0, the side of parent's main axis should be determined by
+    // parent
+    if (flex_grow > 0)
+        return (mainAxis == horizontal) == flex_parent->horizontal;
+
+    return true;
 }
 
 void ui::update_context::set_hit_hovered(widget *w) {
