@@ -141,6 +141,9 @@ void ui::flex_widget::update(update_context &ctx) {
             } else {
                 child->width->animate_to(
                     std::max(0.f, *width - *padding_left - *padding_right));
+                if (auto tw = dynamic_cast<text_widget *>(child.get())) {
+                    tw->max_width = std::max(0.f, *width - *padding_left - *padding_right);
+                }
             }
         }
     }
@@ -192,7 +195,7 @@ void ui::flex_widget::reposition_children_flex(
             }
         }
     }
-    
+
     float gap_space = (children_rev.size() - 1) * gap;
     // Calculate spacer size if needed
     float spacer_size = 0;

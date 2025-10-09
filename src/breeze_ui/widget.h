@@ -222,7 +222,10 @@ struct widget : std::enable_shared_from_this<widget> {
     }
 };
 
-// A widget with child which lays out children in a row or column
+// A widget with child which lays out children in a row or column.
+//
+// Specifically, when `horizontal == false` and `align_items == stretch`,
+// it sets its text_widget child's max width to its width.
 struct flex_widget : public widget {
     enum class justify {
         start,
