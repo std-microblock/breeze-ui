@@ -128,26 +128,6 @@ bool ui::update_context::hovered(widget *w, bool hittest) const {
 float ui::widget::measure_height(update_context &ctx) { return height->dest(); }
 float ui::widget::measure_width(update_context &ctx) { return width->dest(); }
 void ui::flex_widget::update(update_context &ctx) {
-    // Apply align_items: stretch
-    // This must be done before updating children, because children may depend
-    // on the size
-    if (align_items == align::stretch) {
-        for (auto &child : children) {
-            if (dynamic_cast<spacer *>(child.get()))
-                continue;
-            if (horizontal) {
-                child->height->animate_to(
-                    std::max(0.f, *height - *padding_top - *padding_bottom));
-            } else {
-                child->width->animate_to(
-                    std::max(0.f, *width - *padding_left - *padding_right));
-                if (auto tw = dynamic_cast<text_widget *>(child.get())) {
-                    tw->max_width = std::max(0.f, *width - *padding_left - *padding_right);
-                }
-            }
-        }
-    }
-
     widget::update(ctx);
     auto forkctx = ctx.with_offset(*x, *y);
     reposition_children_flex(forkctx, children);
@@ -279,6 +259,9 @@ void ui::flex_widget::reposition_children_flex(
                 break;
             case align::stretch:
                 child->width->animate_to(round(container_width));
+                if (auto tw = dynamic_cast<text_widget *>(child.get())) {
+                    tw->max_width = container_width;
+                }
                 child->x->animate_to(round(x));
                 break;
             case align::start:
