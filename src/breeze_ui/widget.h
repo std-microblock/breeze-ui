@@ -293,6 +293,9 @@ struct text_widget : public widget {
 
     bool shrink_vertical = true, shrink_horizontal = true;
     void update(update_context &ctx) override;
+
+    float measure_height(update_context &ctx) override;
+    float measure_width(update_context &ctx) override;
 };
 
 // A widget that renders children in it with a padding

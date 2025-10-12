@@ -25,15 +25,14 @@ void ui::widget::render_child_basic(nanovg_context ctx,
     if (!w)
         return;
 
-    constexpr float big_number = 1e5;
     auto can_render_width =
              enable_child_clipping
                  ? std::max(std::min(**w->width, **width - *w->x), 0.f)
-                 : big_number,
-         can_render_height =
+                 : INFINITY,
+         can_render_height = 
              enable_child_clipping
                  ? std::max(std::min(**w->height, **height - *w->y), 0.f)
-                 : big_number;
+                 : INFINITY;
 
     if (can_render_width > 0 && can_render_height > 0) {
         ctx.save();
@@ -101,6 +100,8 @@ void ui::widget::update(update_context &ctx) {
 }
 void ui::widget::add_child(std::shared_ptr<widget> child) {
     children.push_back(std::move(child));
+    children_dirty = true;
+    needs_repaint = true;
 }
 
 bool ui::update_context::hovered(widget *w, bool hittest) const {
@@ -725,4 +726,20 @@ void ui::widget::remove_child(std::shared_ptr<widget> child) {
     children.erase(std::remove(children.begin(), children.end(), child),
                    children.end());
     children_dirty = true;
+}
+float ui::text_widget::measure_height(update_context &ctx) {
+    ctx.vg.fontSize(font_size);
+    ctx.vg.fontFace(font_family.c_str());
+    auto text = max_width < 0
+                    ? ctx.vg.measureText(this->text.c_str())
+                    : ctx.vg.measureTextBox(this->text.c_str(), max_width);
+    return text.second;
+}
+float ui::text_widget::measure_width(update_context &ctx) {
+    ctx.vg.fontSize(font_size);
+    ctx.vg.fontFace(font_family.c_str());
+    auto text = max_width < 0
+                    ? ctx.vg.measureText(this->text.c_str())
+                    : ctx.vg.measureTextBox(this->text.c_str(), max_width);
+    return max_width > 0 ? std::min(text.first, max_width) : text.first;
 }
