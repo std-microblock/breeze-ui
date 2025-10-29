@@ -67,7 +67,7 @@ void acrylic_background_widget::update(update_context &ctx) {
 
             ShowWindow((HWND)hwnd, SW_SHOW);
 
-            SetWindowPos(handle, (HWND)hwnd, 0, 0, 0, 0,
+            SetWindowPos((HWND)hwnd, handle, 0, 0, 0, 0,
                          SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE |
                              SWP_NOREDRAW | SWP_NOSENDCHANGING |
                              SWP_NOCOPYBITS);
