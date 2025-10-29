@@ -40,7 +40,7 @@ void acrylic_background_widget::update(update_context &ctx) {
                       << std::endl;
             return;
         }
-        auto handle = glfwGetWin32Window(win);
+        auto parent_handle = glfwGetWin32Window(win);
         render_thread = std::thread([=, this]() {
             hwnd = CreateWindowExW(
                 WS_EX_TOOLWINDOW | WS_EX_TRANSPARENT | WS_EX_NOACTIVATE |
@@ -67,7 +67,7 @@ void acrylic_background_widget::update(update_context &ctx) {
 
             ShowWindow((HWND)hwnd, SW_SHOW);
 
-            SetWindowPos((HWND)hwnd, handle, 0, 0, 0, 0,
+            SetWindowPos((HWND)hwnd, parent_handle, 0, 0, 0, 0,
                          SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE |
                              SWP_NOREDRAW | SWP_NOSENDCHANGING |
                              SWP_NOCOPYBITS);
@@ -82,7 +82,7 @@ void acrylic_background_widget::update(update_context &ctx) {
 
                 int winx, winy;
                 RECT rect;
-                GetWindowRect(handle, &rect);
+                GetWindowRect(parent_handle, &rect);
                 winx = rect.left;
                 winy = rect.top;
 
@@ -96,9 +96,10 @@ void acrylic_background_widget::update(update_context &ctx) {
 
                 auto zorder_this = GetWindowZOrder((HWND)hwnd);
                 auto zorder_last = GetWindowZOrder((HWND)last_hwnd_self);
+                auto zorder_parent = GetWindowZOrder(parent_handle);
 
-                if (zorder_this < zorder_last && last_hwnd_self && hwnd) {
-                    SetWindowPos((HWND)hwnd, handle, 0, 0, 0, 0,
+                if ((zorder_this < zorder_last || zorder_parent < zorder_this) && last_hwnd_self && hwnd) {
+                    SetWindowPos((HWND)hwnd, parent_handle, 0, 0, 0, 0,
                                  SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE |
                                      SWP_NOREDRAW | SWP_NOSENDCHANGING |
                                      SWP_NOCOPYBITS);
