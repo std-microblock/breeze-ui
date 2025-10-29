@@ -98,7 +98,7 @@ void acrylic_background_widget::update(update_context &ctx) {
                 auto zorder_last = GetWindowZOrder((HWND)last_hwnd_self);
                 auto zorder_parent = GetWindowZOrder(parent_handle);
 
-                if ((zorder_this < zorder_last || zorder_parent < zorder_this) && last_hwnd_self && hwnd) {
+                if ((zorder_this < zorder_last || zorder_parent < zorder_this) && hwnd) {
                     SetWindowPos((HWND)hwnd, parent_handle, 0, 0, 0, 0,
                                  SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE |
                                      SWP_NOREDRAW | SWP_NOSENDCHANGING |
