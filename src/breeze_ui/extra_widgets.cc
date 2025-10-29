@@ -89,11 +89,6 @@ void acrylic_background_widget::update(update_context &ctx) {
                                  SWP_NOSENDCHANGING | SWP_NOCOPYBITS |
                                  SWP_NOREPOSITION | SWP_NOZORDER);
 
-                SetWindowPos(handle_parent, (HWND)hwnd, 0, 0, 0, 0,
-                             SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE |
-                                 SWP_NOREDRAW | SWP_NOSENDCHANGING |
-                                 SWP_NOCOPYBITS);
-
                 SetLayeredWindowAttributes((HWND)hwnd, 0, *opacity, LWA_ALPHA);
 
                 should_update = should_update || **x != current_xywh[0] ||
@@ -150,7 +145,7 @@ void acrylic_background_widget::render(nanovg_context ctx) {
     ctx.fillRoundedRect(*x, *y, *width, *height, *radius);
     auto win = glfwGetCurrentContext();
     auto handle_parent = glfwGetWin32Window(win);
-    SetWindowPos(handle_parent, (HWND)hwnd, 0, 0, 0, 0,
+    SetWindowPos((HWND)hwnd, handle_parent, 0, 0, 0, 0,
                  SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOREDRAW |
                      SWP_NOSENDCHANGING | SWP_NOCOPYBITS | SWP_ASYNCWINDOWPOS);
 
