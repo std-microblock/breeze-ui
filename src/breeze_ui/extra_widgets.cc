@@ -40,7 +40,7 @@ void acrylic_background_widget::update(update_context &ctx) {
                       << std::endl;
             return;
         }
-        auto handle_parent = glfwGetWin32Window(win);
+        auto handle = glfwGetWin32Window(win);
         render_thread = std::thread([=, this]() {
             hwnd = CreateWindowExW(
                 WS_EX_TOOLWINDOW | WS_EX_TRANSPARENT | WS_EX_NOACTIVATE |
@@ -67,6 +67,11 @@ void acrylic_background_widget::update(update_context &ctx) {
 
             ShowWindow((HWND)hwnd, SW_SHOW);
 
+            SetWindowPos(handle, (HWND)hwnd, 0, 0, 0, 0,
+                         SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE |
+                             SWP_NOREDRAW | SWP_NOSENDCHANGING |
+                             SWP_NOCOPYBITS);
+
             bool rgn_set = false;
             while (true) {
                 if (to_close) {
@@ -77,7 +82,7 @@ void acrylic_background_widget::update(update_context &ctx) {
 
                 int winx, winy;
                 RECT rect;
-                GetWindowRect(handle_parent, &rect);
+                GetWindowRect(handle, &rect);
                 winx = rect.left;
                 winy = rect.top;
 
@@ -89,10 +94,15 @@ void acrylic_background_widget::update(update_context &ctx) {
                                  SWP_NOSENDCHANGING | SWP_NOCOPYBITS |
                                  SWP_NOREPOSITION | SWP_NOZORDER);
 
-                SetWindowPos(handle_parent, (HWND)hwnd, 0, 0, 0, 0,
-                             SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE |
-                                 SWP_NOREDRAW | SWP_NOSENDCHANGING |
-                                 SWP_NOCOPYBITS);
+                auto zorder_this = GetWindowZOrder((HWND)hwnd);
+                auto zorder_last = GetWindowZOrder((HWND)last_hwnd_self);
+
+                if (zorder_this < zorder_last && last_hwnd_self && hwnd) {
+                    SetWindowPos((HWND)hwnd, handle, 0, 0, 0, 0,
+                                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE |
+                                     SWP_NOREDRAW | SWP_NOSENDCHANGING |
+                                     SWP_NOCOPYBITS);
+                }
 
                 SetLayeredWindowAttributes((HWND)hwnd, 0, *opacity, LWA_ALPHA);
 
@@ -135,10 +145,12 @@ void acrylic_background_widget::update(update_context &ctx) {
     should_update = should_update || (width->updated() || height->updated() ||
                                       radius->updated() || x->updated() ||
                                       y->updated() || opacity->updated());
+    last_hwnd = nullptr;
     if (use_dwm) {
         radius->reset_to(8.f);
     }
 }
+thread_local void *acrylic_background_widget::last_hwnd = 0;
 void acrylic_background_widget::render(nanovg_context ctx) {
     widget::render(ctx);
 
@@ -148,11 +160,8 @@ void acrylic_background_widget::render(nanovg_context ctx) {
     bg_color_tmp.a *= *opacity / 255.f;
     ctx.fillColor(bg_color_tmp);
     ctx.fillRoundedRect(*x, *y, *width, *height, *radius);
-    auto win = glfwGetCurrentContext();
-    auto handle_parent = glfwGetWin32Window(win);
-    SetWindowPos(handle_parent, (HWND)hwnd, 0, 0, 0, 0,
-                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOREDRAW |
-                     SWP_NOSENDCHANGING | SWP_NOCOPYBITS | SWP_ASYNCWINDOWPOS);
+    last_hwnd_self = last_hwnd;
+    last_hwnd = hwnd;
 
     offset_x = ctx.offset_x;
     offset_y = ctx.offset_y;

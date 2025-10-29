@@ -29,6 +29,8 @@ struct acrylic_background_widget : public rect_widget {
     std::optional<std::thread> render_thread;
     bool to_close = false;
     float offset_x = 0, offset_y = 0, dpi_scale = 1;
+    static thread_local void *last_hwnd;
+    void *last_hwnd_self = nullptr;
     void update_color();
 
     void render(nanovg_context ctx) override;
