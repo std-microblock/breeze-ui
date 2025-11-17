@@ -83,10 +83,12 @@ void render_target::start_loop() {
     while (!glfwWindowShouldClose(window) && !should_loop_stop_hide_as_close) {
         render();
         {
-            std::lock_guard lock(loop_thread_tasks_lock);
             while (!loop_thread_tasks.empty()) {
-                loop_thread_tasks.front()();
+                std::unique_lock lock(loop_thread_tasks_lock);
+                auto fn = std::move(loop_thread_tasks.front());
                 loop_thread_tasks.pop();
+                lock.unlock();
+                fn();
             }
         }
     }
