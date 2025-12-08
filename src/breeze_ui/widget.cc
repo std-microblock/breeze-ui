@@ -29,7 +29,7 @@ void ui::widget::render_child_basic(nanovg_context ctx,
              enable_child_clipping
                  ? std::max(std::min(**w->width, **width - *w->x), 0.f)
                  : INFINITY,
-         can_render_height = 
+         can_render_height =
              enable_child_clipping
                  ? std::max(std::min(**w->height, **height - *w->y), 0.f)
                  : INFINITY;
@@ -134,7 +134,7 @@ void ui::flex_widget::update(update_context &ctx) {
             std::clamp(scroll_top->dest() + ctx.scroll_y * 100,
                        height->dest() - actual_height, 0.f));
     }
-    
+
     auto forkctx2 = ctx.with_offset(*x, *y + *scroll_top);
     reposition_children_flex(forkctx2, children);
 
@@ -190,6 +190,14 @@ void ui::flex_widget::reposition_children_flex(
     float total_flex_grow = 0.0f;
 
     for (auto &child : children_rev) {
+        // Set max_width for text_widget before measuring to get correct size
+        if (!horizontal && align_items == align::stretch) {
+            float container_width = width->dest() - *padding_left - *padding_right;
+            if (auto tw = dynamic_cast<text_widget *>(child.get())) {
+                tw->max_width = container_width;
+            }
+        }
+
         float child_width = child->measure_width(ctx);
         float child_height = child->measure_height(ctx);
         measure_cache.emplace_back(child_width, child_height);
@@ -235,13 +243,13 @@ void ui::flex_widget::reposition_children_flex(
     if (should_autosize(horizontal)) {
         width->animate_to(
             r((horizontal ? total_content_size : max_child_width) +
-                  *padding_left + *padding_right));
+              *padding_left + *padding_right));
     }
 
     if (should_autosize(!horizontal)) {
         height->animate_to(
             r((horizontal ? max_child_height : total_content_size) +
-                  *padding_top + *padding_bottom));
+              *padding_top + *padding_bottom));
     }
 
     // Get final container dimensions for layout
@@ -268,8 +276,7 @@ void ui::flex_widget::reposition_children_flex(
                     r(y + (container_height - cached_height) / 2));
                 break;
             case align::end:
-                child->y->animate_to(
-                    r(y + container_height - cached_height));
+                child->y->animate_to(r(y + container_height - cached_height));
                 break;
             case align::stretch:
                 child->height->animate_to(r(container_height));
@@ -292,9 +299,6 @@ void ui::flex_widget::reposition_children_flex(
                 break;
             case align::stretch:
                 child->width->animate_to(r(container_width));
-                if (auto tw = dynamic_cast<text_widget *>(child.get())) {
-                    tw->max_width = container_width;
-                }
                 child->x->animate_to(r(x));
                 break;
             case align::start:
@@ -359,8 +363,7 @@ void ui::flex_widget::reposition_children_flex(
                 flex_extra = (child->flex_grow / total_flex_grow) *
                              flex_space_to_distribute;
                 if (horizontal) {
-                    child->width->animate_to(
-                        r(child_base_size + flex_extra));
+                    child->width->animate_to(r(child_base_size + flex_extra));
                 }
             }
 
@@ -383,8 +386,7 @@ void ui::flex_widget::reposition_children_flex(
                 flex_extra = (child->flex_grow / total_flex_grow) *
                              flex_space_to_distribute;
                 if (!horizontal) {
-                    child->height->animate_to(
-                        r(child_base_size + flex_extra));
+                    child->height->animate_to(r(child_base_size + flex_extra));
                 }
             }
 
