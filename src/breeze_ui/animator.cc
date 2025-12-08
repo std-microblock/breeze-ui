@@ -74,7 +74,6 @@ void ui::animated_float::animate_to(float dest) {
     }
 
     if (this->easing == easing_type::mutation) {
-        progress = 0.999999999f;
         value = dest;
     }
 }
