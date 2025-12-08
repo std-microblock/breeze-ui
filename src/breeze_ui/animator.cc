@@ -72,6 +72,11 @@ void ui::animated_float::animate_to(float dest) {
     if (before_animate) {
         before_animate.value()(dest);
     }
+
+    if (this->easing == easing_type::mutation) {
+        progress = 0.999999999f;
+        value = dest;
+    }
 }
 float ui::animated_float::var() const { return value; }
 float ui::animated_float::prog() const { return progress; }
