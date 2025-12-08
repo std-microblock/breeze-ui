@@ -132,6 +132,8 @@ struct widget : std::enable_shared_from_this<widget> {
 
     // Flex grow factor (0 means no growing)
     float flex_grow = 0.0f;
+    // Flex shrink factor (1 means default shrinking)
+    float flex_shrink = 1.0f;
 
     float _debug_offset_cache[2];
     bool enable_child_clipping = false;

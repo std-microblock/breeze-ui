@@ -184,10 +184,11 @@ void ui::flex_widget::reposition_children_flex(
     std::vector<std::pair<float, float>> measure_cache;
     measure_cache.reserve(children_rev.size());
 
-    // Pass 1: Measure all children and calculate total flex grow
+    // Pass 1: Measure all children and calculate total flex grow/shrink
     float max_child_width = 0, max_child_height = 0;
     float total_fixed_size = 0;
     float total_flex_grow = 0.0f;
+    float total_flex_shrink = 0.0f;
 
     for (auto &child : children_rev) {
         // Set max_width for text_widget before measuring to get correct size
@@ -207,12 +208,14 @@ void ui::flex_widget::reposition_children_flex(
             if (!dynamic_cast<const spacer *>(child.get())) {
                 total_fixed_size += child_width;
                 total_flex_grow += child->flex_grow;
+                total_flex_shrink += child->flex_shrink;
             }
         } else {
             max_child_width = std::max(max_child_width, child_width);
             if (!dynamic_cast<const spacer *>(child.get())) {
                 total_fixed_size += child_height;
                 total_flex_grow += child->flex_grow;
+                total_flex_shrink += child->flex_shrink;
             }
         }
     }
@@ -341,10 +344,12 @@ void ui::flex_widget::reposition_children_flex(
         break;
     }
 
-    // Calculate space to distribute among flex-growing children
+    // Calculate space to distribute among flex-growing/shrinking children
     float flex_space_to_distribute = 0.0f;
-    if (total_flex_grow > 0.0f && remaining_space > 0.0f) {
+    if (remaining_space > 0.0f && total_flex_grow > 0.0f) {
         flex_space_to_distribute = remaining_space;
+    } else if (remaining_space < 0.0f && total_flex_shrink > 0.0f) {
+        flex_space_to_distribute = remaining_space; // negative
     }
 
     if (horizontal) {
@@ -357,13 +362,23 @@ void ui::flex_widget::reposition_children_flex(
                                         ? spacer_size
                                         : measure_cache[i].first;
 
-            // Apply flex grow if this child can grow
+            // Apply flex grow/shrink if this child can flex
             float flex_extra = 0.0f;
-            if (child->flex_grow > 0.0f && total_flex_grow > 0.0f) {
-                flex_extra = (child->flex_grow / total_flex_grow) *
-                             flex_space_to_distribute;
-                if (horizontal) {
-                    child->width->animate_to(r(child_base_size + flex_extra));
+            if (flex_space_to_distribute != 0.0f) {
+                float flex_factor = 0.0f;
+                float total_flex = 0.0f;
+                if (flex_space_to_distribute > 0.0f && total_flex_grow > 0.0f) {
+                    flex_factor = child->flex_grow;
+                    total_flex = total_flex_grow;
+                } else if (flex_space_to_distribute < 0.0f && total_flex_shrink > 0.0f) {
+                    flex_factor = child->flex_shrink;
+                    total_flex = total_flex_shrink;
+                }
+                if (flex_factor > 0.0f && total_flex > 0.0f) {
+                    flex_extra = (flex_factor / total_flex) * flex_space_to_distribute;
+                    if (horizontal) {
+                        child->width->animate_to(r(child_base_size + flex_extra));
+                    }
                 }
             }
 
@@ -380,13 +395,23 @@ void ui::flex_widget::reposition_children_flex(
                                         ? spacer_size
                                         : measure_cache[i].second;
 
-            // Apply flex grow if this child can grow
+            // Apply flex grow/shrink if this child can flex
             float flex_extra = 0.0f;
-            if (child->flex_grow > 0.0f && total_flex_grow > 0.0f) {
-                flex_extra = (child->flex_grow / total_flex_grow) *
-                             flex_space_to_distribute;
-                if (!horizontal) {
-                    child->height->animate_to(r(child_base_size + flex_extra));
+            if (flex_space_to_distribute != 0.0f) {
+                float flex_factor = 0.0f;
+                float total_flex = 0.0f;
+                if (flex_space_to_distribute > 0.0f && total_flex_grow > 0.0f) {
+                    flex_factor = child->flex_grow;
+                    total_flex = total_flex_grow;
+                } else if (flex_space_to_distribute < 0.0f && total_flex_shrink > 0.0f) {
+                    flex_factor = child->flex_shrink;
+                    total_flex = total_flex_shrink;
+                }
+                if (flex_factor > 0.0f && total_flex > 0.0f) {
+                    flex_extra = (flex_factor / total_flex) * flex_space_to_distribute;
+                    if (!horizontal) {
+                        child->height->animate_to(r(child_base_size + flex_extra));
+                    }
                 }
             }
 
