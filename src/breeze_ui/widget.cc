@@ -134,11 +134,12 @@ void ui::flex_widget::update(update_context &ctx) {
             std::clamp(scroll_top->dest() + ctx.scroll_y * 100,
                        height->dest() - actual_height, 0.f));
     }
-    auto forkctx = ctx.with_offset(0, *scroll_top);
-    widget::update(forkctx);
-
+    
     auto forkctx2 = ctx.with_offset(*x, *y + *scroll_top);
     reposition_children_flex(forkctx2, children);
+
+    auto forkctx = ctx.with_offset(0, *scroll_top);
+    widget::update(forkctx);
 
     actual_height = height->dest();
     if (max_height < actual_height)
