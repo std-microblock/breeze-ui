@@ -2451,6 +2451,14 @@ static void nvg__renderText(NVGcontext* ctx, NVGvertex* verts, int nverts)
 	paint.innerColor.a *= state->alpha;
 	paint.outerColor.a *= state->alpha;
 
+	// Round vertexs to integers
+	for (int i = 0; i < nverts; i++) {
+		verts[i].u = round(verts[i].u);
+		verts[i].v = round(verts[i].v);
+		verts[i].x = round(verts[i].x);
+		verts[i].y = round(verts[i].y);
+	}
+
 	ctx->params.renderTriangles(ctx->params.userPtr, &paint, state->compositeOperation, &state->scissor, verts, nverts, ctx->fringeWidth);
 
 	ctx->drawCallCount++;
