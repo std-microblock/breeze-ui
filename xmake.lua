@@ -9,7 +9,7 @@ includes("deps/glfw.lua")
 add_requires("breeze-glfw", {alias = "glfw"})
 add_requires("glad")
 
-target("nanovg")
+target("breeze-nanovg")
     set_kind("static")
     add_files("src/nanovg/**.c")
     add_includedirs("src/nanovg", {
@@ -17,7 +17,7 @@ target("nanovg")
     })
     add_headerfiles("src/nanovg/*.h")
 
-target("nanosvg")
+target("breeze-nanosvg")
     set_kind("headeronly")
     add_files("src/nanosvg/**.c")
     add_includedirs("src/nanosvg", {
@@ -30,7 +30,7 @@ target("breeze_ui")
     add_packages("glfw", "glad", {
         public = true
     })
-    add_deps("nanovg", "nanosvg", {
+    add_deps("breeze-nanovg", "breeze-nanosvg", {
         public = true
     })
     add_syslinks("dwmapi", "shcore")
