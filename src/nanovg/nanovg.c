@@ -2453,8 +2453,6 @@ static void nvg__renderText(NVGcontext* ctx, NVGvertex* verts, int nverts)
 
 	// Round vertexs to integers
 	for (int i = 0; i < nverts; i++) {
-		verts[i].u = round(verts[i].u);
-		verts[i].v = round(verts[i].v);
 		verts[i].x = round(verts[i].x);
 		verts[i].y = round(verts[i].y);
 	}
