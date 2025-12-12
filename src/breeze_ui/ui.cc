@@ -337,7 +337,7 @@ void render_target::render() {
     nanovg_context vg{nvg, this};
     time_checkpoints("NanoVG context");
 
-    vg.beginFrame(fb_width, fb_height, dpi_scale);
+    vg.beginFrame(fb_width, fb_height, 1);
     vg.scale(dpi_scale, dpi_scale);
 
     double mouse_x, mouse_y;
