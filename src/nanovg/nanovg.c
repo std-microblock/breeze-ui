@@ -2953,3 +2953,7 @@ void nvgTextMetrics(NVGcontext* ctx, float* ascender, float* descender, float* l
 		*lineh *= invscale;
 }
 // vim: ft=c nu noet ts=4
+
+void nvgFonsResetAtlas(NVGcontext *ctx) {
+	fonsResetAtlas(ctx->fs, 1024, 1024);
+}

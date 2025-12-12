@@ -112,6 +112,7 @@ inline auto textBreakLines( const char* string, const char* end, float breakRowW
 inline auto deleteInternal() { return nvgDeleteInternal(ctx); }
 inline auto internalParams() { return nvgInternalParams(ctx); }
 inline auto debugDumpPathCache() { return nvgDebugDumpPathCache(ctx); }
+inline auto fonsResetAtlas() { return nvgFonsResetAtlas(ctx); }
     // clang-format on
 
     // shortcuts
