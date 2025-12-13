@@ -2953,5 +2953,5 @@ void nvgTextMetrics(NVGcontext* ctx, float* ascender, float* descender, float* l
 // vim: ft=c nu noet ts=4
 
 void nvgFonsResetAtlas(NVGcontext *ctx) {
-	fonsResetAtlas(ctx->fs, 1024, 1024);
+	nvg__allocTextAtlas(ctx);
 }
