@@ -304,7 +304,7 @@ inline void nanovg_context::drawImage(const NVGImage &image, float x, float y,
 
 NVGImage nanovg_context::imageFromSVG(NSVGimage *image, float dpi_scale) {
     thread_local static auto rast = nsvgCreateRasterizer();
-    auto width = image->width, height = image->height;
+    int width = image->width, height = image->height;
     width *= dpi_scale, height *= dpi_scale;
 
     auto data = (unsigned char *)malloc(width * height * 4);
