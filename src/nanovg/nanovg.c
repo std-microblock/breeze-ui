@@ -2453,8 +2453,8 @@ static void nvg__renderText(NVGcontext* ctx, NVGvertex* verts, int nverts)
 
 	// Round vertexs to integers
 	for (int i = 0; i < nverts; i++) {
-		verts[i].x = round(verts[i].x);
-		verts[i].y = round(verts[i].y);
+		verts[i].x = floor(verts[i].x);
+		verts[i].y = floor(verts[i].y);
 	}
 
 	ctx->params.renderTriangles(ctx->params.userPtr, &paint, state->compositeOperation, &state->scissor, verts, nverts, ctx->fringeWidth);
