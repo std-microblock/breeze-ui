@@ -15,7 +15,7 @@ int main() {
         return -1;
     }
 
-    glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
+    // glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
@@ -112,7 +112,7 @@ int main() {
                 firstBlueY = height - 1 - y;
             }
 
-            if (firstBlackY == -1 && r == 0 && g == 0 && b == 0 && a == 255) {
+            if (firstBlackY == -1 && r == 0 && g == 0 && b == 0 && a > 128) {
                 firstBlackY = height - 1 - y;
             }
 
@@ -147,6 +147,12 @@ int main() {
     } else {
         std::cout << "\nERROR: Could not detect blue or black pixels"
                   << std::endl;
+    }
+
+    glFlush();
+    glfwSwapBuffers(window);
+    while (!glfwWindowShouldClose(window)) {
+        glfwPollEvents();
     }
 
     nvgDeleteGL3(vg);
