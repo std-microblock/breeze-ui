@@ -172,6 +172,8 @@ inline auto fonsResetAtlas() { return nvgFonsResetAtlas(ctx); }
 
     inline auto measureText(const char *string) {
         float bounds[4];
+        auto t = transaction();
+        textAlign(NVG_ALIGN_TOP | NVG_ALIGN_LEFT);
         textBounds(0, 0, string, nullptr, bounds);
         return std::make_pair(bounds[2] - bounds[0], bounds[3] - bounds[1]);
     }
