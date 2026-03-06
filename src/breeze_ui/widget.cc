@@ -546,7 +546,7 @@ void ui::text_widget::render(nanovg_context ctx) {
     ctx.textAlign(NVG_ALIGN_TOP | NVG_ALIGN_LEFT);
     ctx.fontFace(font_family.c_str());
 
-    auto yoffset = ctx.measureYOffset("测试Aa");
+    auto yoffset = ctx.measureYOffset(text.c_str());
     if (max_width > 0) {
         ctx.textBox(*x, *y + yoffset, max_width, text.c_str(), nullptr);
         return;
