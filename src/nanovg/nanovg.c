@@ -2368,6 +2368,13 @@ void nvgTextLineHeight(NVGcontext* ctx, float lineHeight)
 	state->lineHeight = lineHeight;
 }
 
+int nvgGetTextAlign(NVGcontext* ctx)
+{
+	NVGstate* state = nvg__getState(ctx);
+	return state->textAlign;
+}
+
+
 void nvgTextAlign(NVGcontext* ctx, int align)
 {
 	NVGstate* state = nvg__getState(ctx);

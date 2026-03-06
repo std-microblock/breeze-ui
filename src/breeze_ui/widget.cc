@@ -193,7 +193,8 @@ void ui::flex_widget::reposition_children_flex(
     for (auto &child : children_rev) {
         // Set max_width for text_widget before measuring to get correct size
         if (!horizontal && align_items == align::stretch) {
-            float container_width = width->dest() - *padding_left - *padding_right;
+            float container_width =
+                width->dest() - *padding_left - *padding_right;
             if (auto tw = dynamic_cast<text_widget *>(child.get())) {
                 tw->max_width = container_width;
             }
@@ -370,14 +371,17 @@ void ui::flex_widget::reposition_children_flex(
                 if (flex_space_to_distribute > 0.0f && total_flex_grow > 0.0f) {
                     flex_factor = child->flex_grow;
                     total_flex = total_flex_grow;
-                } else if (flex_space_to_distribute < 0.0f && total_flex_shrink > 0.0f) {
+                } else if (flex_space_to_distribute < 0.0f &&
+                           total_flex_shrink > 0.0f) {
                     flex_factor = child->flex_shrink;
                     total_flex = total_flex_shrink;
                 }
                 if (flex_factor > 0.0f && total_flex > 0.0f) {
-                    flex_extra = (flex_factor / total_flex) * flex_space_to_distribute;
+                    flex_extra =
+                        (flex_factor / total_flex) * flex_space_to_distribute;
                     if (horizontal) {
-                        child->width->animate_to(r(child_base_size + flex_extra));
+                        child->width->animate_to(
+                            r(child_base_size + flex_extra));
                     }
                 }
             }
@@ -403,14 +407,17 @@ void ui::flex_widget::reposition_children_flex(
                 if (flex_space_to_distribute > 0.0f && total_flex_grow > 0.0f) {
                     flex_factor = child->flex_grow;
                     total_flex = total_flex_grow;
-                } else if (flex_space_to_distribute < 0.0f && total_flex_shrink > 0.0f) {
+                } else if (flex_space_to_distribute < 0.0f &&
+                           total_flex_shrink > 0.0f) {
                     flex_factor = child->flex_shrink;
                     total_flex = total_flex_shrink;
                 }
                 if (flex_factor > 0.0f && total_flex > 0.0f) {
-                    flex_extra = (flex_factor / total_flex) * flex_space_to_distribute;
+                    flex_extra =
+                        (flex_factor / total_flex) * flex_space_to_distribute;
                     if (!horizontal) {
-                        child->height->animate_to(r(child_base_size + flex_extra));
+                        child->height->animate_to(
+                            r(child_base_size + flex_extra));
                     }
                 }
             }
@@ -546,29 +553,31 @@ void ui::text_widget::render(nanovg_context ctx) {
     ctx.textAlign(NVG_ALIGN_TOP | NVG_ALIGN_LEFT);
     ctx.fontFace(font_family.c_str());
 
-    auto yoffset = ctx.measureYOffset(text.c_str());
     if (max_width > 0) {
-        ctx.textBox(*x, *y + yoffset, max_width, text.c_str(), nullptr);
+        ctx.textBox(*x, *y + _yoffset_when_update, max_width, text.c_str(),
+                    nullptr);
         return;
     } else {
-        ctx.text(*x, *y + yoffset, text.c_str(), nullptr);
+        ctx.text(*x, *y + _yoffset_when_update, text.c_str(), nullptr);
     }
 }
 void ui::text_widget::update(update_context &ctx) {
     widget::update(ctx);
     ctx.vg.fontSize(font_size);
     ctx.vg.fontFace(font_family.c_str());
-    auto text = max_width < 0
-                    ? ctx.vg.measureText(this->text.c_str())
-                    : ctx.vg.measureTextBox(this->text.c_str(), max_width);
+    auto [w, h, yoffset] =
+        max_width < 0
+            ? ctx.vg.measureTextWithYOffset(this->text.c_str())
+            : ctx.vg.measureTextBoxWithYOffset(this->text.c_str(), max_width);
+
+    _yoffset_when_update = yoffset;
 
     if (shrink_horizontal) {
-        width->animate_to(max_width > 0 ? std::min(text.first, max_width)
-                                        : text.first);
+        width->animate_to(max_width > 0 ? std::min(w, max_width) : w);
     }
 
     if (shrink_vertical) {
-        height->animate_to(text.second);
+        height->animate_to(h);
     }
 }
 void ui::padding_widget::update(update_context &ctx) {

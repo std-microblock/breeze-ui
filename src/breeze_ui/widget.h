@@ -294,6 +294,7 @@ struct text_widget : public widget {
     void render(nanovg_context ctx) override;
 
     bool shrink_vertical = true, shrink_horizontal = true;
+    float _yoffset_when_update = 0;
     void update(update_context &ctx) override;
 
     float measure_height(update_context &ctx) override;

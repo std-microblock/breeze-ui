@@ -586,6 +586,9 @@ void nvgTextLineHeight(NVGcontext* ctx, float lineHeight);
 // Sets the text align of current text style, see NVGalign for options.
 void nvgTextAlign(NVGcontext* ctx, int align);
 
+// Gets the text align of current text style, see NVGalign for options.
+int nvgGetTextAlign(NVGcontext* ctx);
+
 // Sets the font face based on specified id of current text style.
 void nvgFontFaceId(NVGcontext* ctx, int font);
 

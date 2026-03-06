@@ -164,13 +164,27 @@ inline auto fonsResetAtlas() { return nvgFonsResetAtlas(ctx); }
         stroke();
     }
 
-    inline auto measureYOffset(const char *string) {
+    inline auto measureTextWithYOffset(const char *string) {
         float bounds[4];
-        auto t = transaction();
-        textAlign(NVG_ALIGN_TOP | NVG_ALIGN_LEFT);
-        nvgTextBounds(ctx, 0, 0, string, nullptr, bounds);
-        auto res = -bounds[1];
-        return res > 10 ? 0 : res; // if the offset is too big, it's probably wrong, so just return 0
+        textBounds(0, 0, string, nullptr, bounds);
+        auto align = nvgGetTextAlign(ctx);
+        return std::make_tuple(bounds[2] - bounds[0], bounds[3] - bounds[1],
+                               (align & NVG_ALIGN_TOP) ? (-bounds[1])
+                               : (align & NVG_ALIGN_BOTTOM)
+                                   ? bounds[3]
+                                   : (bounds[3] - bounds[1]) / 2 - bounds[3]);
+    }
+
+    inline auto measureTextBoxWithYOffset(const char *string,
+                                          float breakRowWidth) {
+        float bounds[4];
+        textBoxBounds(0, 0, breakRowWidth, string, nullptr, bounds);
+        auto align = nvgGetTextAlign(ctx);
+        return std::make_tuple(bounds[2] - bounds[0], bounds[3] - bounds[1],
+                               (align & NVG_ALIGN_TOP) ? (-bounds[1])
+                               : (align & NVG_ALIGN_BOTTOM)
+                                   ? bounds[3]
+                                   : (bounds[3] - bounds[1]) / 2 - bounds[3]);
     }
 
     inline auto measureText(const char *string) {
