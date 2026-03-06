@@ -565,6 +565,8 @@ void ui::text_widget::update(update_context &ctx) {
     widget::update(ctx);
     ctx.vg.fontSize(font_size);
     ctx.vg.fontFace(font_family.c_str());
+    ctx.vg.textAlign(NVG_ALIGN_TOP | NVG_ALIGN_LEFT);
+
     auto [w, h, yoffset] =
         max_width < 0
             ? ctx.vg.measureTextWithYOffset(this->text.c_str())
