@@ -546,11 +546,12 @@ void ui::text_widget::render(nanovg_context ctx) {
     ctx.textAlign(NVG_ALIGN_TOP | NVG_ALIGN_LEFT);
     ctx.fontFace(font_family.c_str());
 
+    auto yoffset = ctx.measureYOffset(text.c_str());
     if (max_width > 0) {
-        ctx.textBox(*x, *y, max_width, text.c_str(), nullptr);
+        ctx.textBox(*x, *y + yoffset, max_width, text.c_str(), nullptr);
         return;
     } else {
-        ctx.text(*x, *y, text.c_str(), nullptr);
+        ctx.text(*x, *y + yoffset, text.c_str(), nullptr);
     }
 }
 void ui::text_widget::update(update_context &ctx) {

@@ -164,6 +164,12 @@ inline auto fonsResetAtlas() { return nvgFonsResetAtlas(ctx); }
         stroke();
     }
 
+    inline auto measureYOffset(const char *string) {
+        float bounds[4];
+        textBounds(0, 0, string, nullptr, bounds);
+        return -bounds[1];
+    }
+
     inline auto measureText(const char *string) {
         float bounds[4];
         textBounds(0, 0, string, nullptr, bounds);
