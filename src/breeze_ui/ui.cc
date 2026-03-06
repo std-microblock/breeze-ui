@@ -128,7 +128,7 @@ std::expected<bool, std::string> render_target::init() {
         }
         glfwWindowHint(GLFW_DECORATED, decorated);
         glfwWindowHint(GLFW_VISIBLE, 0);
-        glfwSetExStyle(window,
+        glfwWindowHint(GLFW_WIN32_EXSTYLE,
                        topmost && transparent
                            ? (WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_LAYERED)
                            : WS_EX_APPWINDOW);
