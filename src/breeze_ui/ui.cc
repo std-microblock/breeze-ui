@@ -15,7 +15,7 @@
 #include "breeze_ui/widget.h"
 
 #include "nanovg.h"
-#define NANOVG_GL3_IMPLEMENTATION
+#define NANOVG_GL3
 #include "nanovg_gl.h"
 
 #include "shellscalingapi.h"
