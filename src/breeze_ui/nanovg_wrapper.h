@@ -169,7 +169,8 @@ inline auto fonsResetAtlas() { return nvgFonsResetAtlas(ctx); }
         auto t = transaction();
         textAlign(NVG_ALIGN_TOP | NVG_ALIGN_LEFT);
         nvgTextBounds(ctx, 0, 0, string, nullptr, bounds);
-        return -bounds[1];
+        auto res = -bounds[1];
+        return res > 10 ? 0 : res; // if the offset is too big, it's probably wrong, so just return 0
     }
 
     inline auto measureText(const char *string) {
