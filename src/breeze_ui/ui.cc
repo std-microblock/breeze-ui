@@ -146,7 +146,9 @@ std::expected<bool, std::string> render_target::init() {
 
     glfwMakeContextCurrent(window);
     glfwSwapInterval(vsync);
-    gladLoadGLLoader((GLADloadproc)glfwGetProcAddress);
+    if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
+        return std::unexpected("Failed to initialize OpenGL loader");
+    }
 
     auto h = glfwGetWin32Window(window);
 
