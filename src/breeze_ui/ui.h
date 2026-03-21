@@ -14,6 +14,7 @@
 #include "GLFW/glfw3.h"
 #include "nanovg.h"
 
+#include "breeze_ui/acrylic_host.h"
 #include "breeze_ui/widget.h"
 
 namespace ui {
@@ -104,6 +105,10 @@ struct render_target {
     flip_buffer<std::array<key_state, GLFW_KEY_LAST + 1>> key_states;
     int64_t last_repaint = 0;
     std::expected<bool, std::string> init();
+    void begin_acrylic_frame();
+    void register_acrylic_region(acrylic_region region);
+    void commit_acrylic_frame();
+    void sync_acrylic_host();
 
     std::optional<std::weak_ptr<widget>> focused_widget = {};
 
@@ -139,6 +144,8 @@ struct render_target {
     decltype(clock.now()) last_time = clock.now();
     bool mouse_down = false, right_mouse_down = false;
     void *parent = nullptr;
+    std::unique_ptr<acrylic_host> acrylic_host_window = nullptr;
+    std::vector<acrylic_region> acrylic_regions = {};
 
     render_target() = default;
     ~render_target();

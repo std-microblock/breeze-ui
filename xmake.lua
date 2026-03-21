@@ -36,12 +36,13 @@ target("breeze_ui")
     add_deps("breeze-nanovg", "breeze-nanosvg", {
         public = true
     })
-    add_syslinks("dwmapi", "shcore")
+    add_syslinks("dwmapi", "shcore", "windowsapp", "CoreMessaging")
     add_files("src/breeze_ui/*.cc")
     add_headerfiles("src/(breeze_ui/*.h)")
     add_includedirs("src/", {
         public = true
     })
+    add_defines("NOMINMAX", "WIN32_LEAN_AND_MEAN")
     set_encodings("utf-8")
 
 target("flex_grow_test")
@@ -54,4 +55,10 @@ target("text_bounds_test")
     set_kind("binary")
     add_deps("breeze_ui")
     add_files("src/test/text_bounds_test.cc")
+    add_includedirs("src/")
+
+target("acrylic_demo")
+    set_kind("binary")
+    add_deps("breeze_ui")
+    add_files("src/test/acrylic_demo.cc")
     add_includedirs("src/")

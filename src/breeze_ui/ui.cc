@@ -81,6 +81,7 @@ void render_target::start_loop() {
     is_in_loop_thread = true;
     glfwMakeContextCurrent(window);
     while (!glfwWindowShouldClose(window) && !should_loop_stop_hide_as_close) {
+        sync_acrylic_host();
         render();
         {
             while (!loop_thread_tasks.empty()) {
@@ -264,6 +265,10 @@ std::expected<bool, std::string> render_target::init() {
 }
 
 render_target::~render_target() {
+    if (acrylic_host_window) {
+        acrylic_host_window->shutdown();
+    }
+
     if (nvg) {
         nvgDeleteGL3(nvg);
     }
@@ -401,13 +406,16 @@ void render_target::render() {
             last_repaint = ms_steady;
             {
                 std::lock_guard lock(rt_lock);
+                begin_acrylic_frame();
                 root->render(vg);
+                commit_acrylic_frame();
             }
             vg.endFrame();
             glFlush();
             glfwSwapBuffers(window);
 
         } else {
+            commit_acrylic_frame();
             if (vsync)
                 Sleep(5);
         }
@@ -434,6 +442,9 @@ void render_target::resize(int width, int height) {
     });
 }
 void render_target::close() {
+    if (acrylic_host_window) {
+        acrylic_host_window->hide();
+    }
     ShowWindow(glfwGetWin32Window(window), SW_HIDE);
     glfwSetWindowShouldClose(window, true);
 }
@@ -460,14 +471,24 @@ void render_target::show() {
     if (topmost)
         SetWindowPos(glfwGetWin32Window(window), HWND_TOPMOST, 0, 0, 0, 0,
                      SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+
+    sync_acrylic_host();
 }
-void render_target::hide() { ShowWindow(glfwGetWin32Window(window), SW_HIDE); }
+void render_target::hide() {
+    if (acrylic_host_window) {
+        acrylic_host_window->hide();
+    }
+    ShowWindow(glfwGetWin32Window(window), SW_HIDE);
+}
 void render_target::hide_as_close() {
     glfwMakeContextCurrent(nullptr);
     should_loop_stop_hide_as_close = true;
     focused_widget = std::nullopt;
     // reset owner widget
     SetWindowLong(glfwGetWin32Window(window), GWLP_HWNDPARENT, 0);
+    if (acrylic_host_window) {
+        acrylic_host_window->hide();
+    }
 }
 void render_target::post_loop_thread_task(std::function<void()> task,
                                           bool delay) {
@@ -489,5 +510,38 @@ void render_target::focus() {
 }
 void *render_target::hwnd() const {
     return window ? glfwGetWin32Window(window) : nullptr;
+}
+
+void render_target::begin_acrylic_frame() { acrylic_regions.clear(); }
+
+void render_target::register_acrylic_region(acrylic_region region) {
+    if (!window || region.width <= 0 || region.height <= 0 ||
+        region.opacity <= 0) {
+        return;
+    }
+
+    if (!acrylic_host_window) {
+        acrylic_host_window = std::make_unique<acrylic_host>();
+    }
+
+    acrylic_regions.push_back(std::move(region));
+}
+
+void render_target::commit_acrylic_frame() {
+    if (!acrylic_host_window) {
+        return;
+    }
+
+    acrylic_host_window->update(glfwGetWin32Window(window), width, height,
+                                dpi_scale, acrylic_regions);
+}
+
+void render_target::sync_acrylic_host() {
+    if (!acrylic_host_window || !window) {
+        return;
+    }
+
+    acrylic_host_window->sync(glfwGetWin32Window(window), width, height,
+                              dpi_scale);
 }
 } // namespace ui
