@@ -256,10 +256,11 @@ void acrylic_host::update_region_visual(region_visual &visual,
     const float height = std::max(region.height * dpi_scale, 0.0f);
     const float radius = std::clamp(region.radius * dpi_scale, 0.0f,
                                     std::min(width, height) / 2.0f);
+    const float opacity = std::clamp(region.opacity, 0.0f, 1.0f);
 
     visual.container.Offset(
         float3{region.x * dpi_scale, region.y * dpi_scale, 0.0f});
-    visual.container.Opacity(std::clamp(region.opacity, 0.0f, 1.0f));
+    visual.container.Opacity(opacity);
 
     visual.geometry.Offset({0.0f, 0.0f});
     visual.geometry.Size({width, height});
