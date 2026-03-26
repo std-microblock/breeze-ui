@@ -34,6 +34,7 @@ public:
                 float dpi_scale, const std::vector<acrylic_region> &regions);
     void sync(HWND parent_hwnd, int logical_width, int logical_height,
               float dpi_scale);
+    void clear();
     void hide();
     void shutdown();
 

@@ -483,10 +483,12 @@ void render_target::hide() {
 void render_target::hide_as_close() {
     glfwMakeContextCurrent(nullptr);
     should_loop_stop_hide_as_close = true;
+    acrylic_regions.clear();
     focused_widget = std::nullopt;
     // reset owner widget
     SetWindowLong(glfwGetWin32Window(window), GWLP_HWNDPARENT, 0);
     if (acrylic_host_window) {
+        acrylic_host_window->clear();
         acrylic_host_window->hide();
     }
 }

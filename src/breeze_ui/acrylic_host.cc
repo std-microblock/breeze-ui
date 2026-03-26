@@ -125,6 +125,15 @@ void acrylic_host::sync(HWND parent_hwnd, int logical_width, int logical_height,
     pump_messages();
 }
 
+void acrylic_host::clear() {
+    visible_ = false;
+    if (root_) {
+        root_.Children().RemoveAll();
+    }
+    region_visuals_.clear();
+    pump_messages();
+}
+
 void acrylic_host::hide() {
     visible_ = false;
     if (hwnd_) {
