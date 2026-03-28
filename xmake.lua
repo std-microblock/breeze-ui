@@ -8,6 +8,7 @@ includes("deps/glfw.lua")
 
 add_requires("breeze-glfw", {alias = "glfw"})
 add_requires("glad")
+add_requires("simdutf")
 
 target("breeze-nanovg")
     set_kind("static")
@@ -30,13 +31,13 @@ target("breeze-nanosvg")
 
 target("breeze_ui")
     set_kind("static")
-    add_packages("glfw", "glad", {
+    add_packages("glfw", "glad", "simdutf", {
         public = true
     })
     add_deps("breeze-nanovg", "breeze-nanosvg", {
         public = true
     })
-    add_syslinks("dwmapi", "shcore", "windowsapp", "CoreMessaging")
+    add_syslinks("dwmapi", "imm32", "shcore", "windowsapp", "CoreMessaging")
     add_files("src/breeze_ui/*.cc")
     add_headerfiles("src/(breeze_ui/*.h)")
     add_includedirs("src/", {

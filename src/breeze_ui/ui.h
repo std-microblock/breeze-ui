@@ -20,6 +20,12 @@
 
 namespace ui {
 
+struct ime_composition_state {
+    std::u32string text;
+    int cursor = 0;
+    bool active = false;
+};
+
 template <typename T> struct flip_buffer {
     T buffer1{}, buffer2{};
     std::atomic_bool use_buffer2 = false;
@@ -104,6 +110,9 @@ struct render_target {
     float dpi_scale = 1;
     float scroll_y = 0;
     flip_buffer<std::array<key_state, GLFW_KEY_LAST + 1>> key_states;
+    flip_buffer<std::u32string> char_input;
+    ime_composition_state ime_composition;
+    std::mutex ime_composition_lock{};
     int64_t last_repaint = 0;
     std::expected<bool, std::string> init();
     void begin_acrylic_frame();
@@ -128,6 +137,11 @@ struct render_target {
     void show();
     void focus();
     void hide_as_close();
+    void set_ime_caret_rect(float x, float y, float height, bool active,
+                            float document_x = 0, float document_y = 0,
+                            float document_width = 0,
+                            float document_height = 0);
+    void clear_ime_composition();
     void *hwnd() const;
     bool should_loop_stop_hide_as_close = false;
     std::optional<std::function<void(bool)>> on_focus_changed;
@@ -144,6 +158,15 @@ struct render_target {
     }
     decltype(clock.now()) last_time = clock.now();
     bool mouse_down = false, right_mouse_down = false;
+    bool ime_caret_active = false;
+    int ime_caret_x = 0;
+    int ime_caret_y = 0;
+    int ime_caret_height = 0;
+    int ime_document_x = 0;
+    int ime_document_y = 0;
+    int ime_document_width = 0;
+    int ime_document_height = 0;
+    void *original_wndproc = nullptr;
     void *parent = nullptr;
     std::unique_ptr<acrylic_host> acrylic_host_window = nullptr;
     std::vector<acrylic_region> acrylic_regions = {};

@@ -5,10 +5,12 @@
 #include <cmath>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <vector>
 
 namespace ui {
 struct render_target;
+struct ime_composition_state;
 struct widget;
 struct screen_info {
     int width, height;
@@ -44,6 +46,9 @@ struct update_context {
     bool key_pressed(int key) const;
     void stop_key_propagation(int key);
     bool key_down(int key) const;
+    bool key_triggered(int key) const;
+    const std::u32string &text_input() const;
+    ime_composition_state ime_composition() const;
 
     float offset_x = 0, offset_y = 0;
     render_target &rt;
@@ -299,6 +304,91 @@ struct text_widget : public widget {
 
     float measure_height(update_context &ctx) override;
     float measure_width(update_context &ctx) override;
+};
+
+struct textbox_widget : public widget {
+    std::string text;
+    std::string placeholder;
+    float font_size = 14;
+    float padding_x = 8;
+    float padding_y = 6;
+    float border_radius = 6;
+    float min_height = 32;
+    float preferred_multiline_height = 96;
+    float line_height_multiplier = 1;
+    bool multiline = false;
+    bool readonly = false;
+    bool disabled = false;
+    animated_color background_color = {this, 1.f, 1.f, 1.f, 235.f / 255.f,
+                                       "textbox.bg"};
+    animated_color readonly_background_color = {
+        this, 250.f / 255.f, 250.f / 255.f, 250.f / 255.f, 235.f / 255.f,
+        "textbox.readonly_bg"};
+    animated_color disabled_background_color = {
+        this, 235.f / 255.f, 235.f / 255.f, 235.f / 255.f, 220.f / 255.f,
+        "textbox.disabled_bg"};
+    animated_color border_color = {this, 180.f / 255.f, 180.f / 255.f,
+                                   180.f / 255.f, 1.f, "textbox.border"};
+    animated_color focus_border_color = {this, 59.f / 255.f, 130.f / 255.f,
+                                         246.f / 255.f, 1.f,
+                                         "textbox.focus_border"};
+    animated_color text_color = {this, 32.f / 255.f, 32.f / 255.f,
+                                 32.f / 255.f, 1.f, "textbox.text"};
+    animated_color disabled_text_color = {
+        this, 140.f / 255.f, 140.f / 255.f, 140.f / 255.f, 1.f,
+        "textbox.disabled_text"};
+    animated_color placeholder_color = {
+        this, 150.f / 255.f, 150.f / 255.f, 150.f / 255.f, 1.f,
+        "textbox.placeholder"};
+    animated_color selection_color = {this, 59.f / 255.f, 130.f / 255.f,
+                                      246.f / 255.f, 100.f / 255.f,
+                                      "textbox.selection"};
+    animated_color caret_color = {this, 20.f / 255.f, 20.f / 255.f,
+                                  20.f / 255.f, 1.f, "textbox.caret"};
+    animated_color composition_underline_color = {
+        this, 59.f / 255.f, 130.f / 255.f, 246.f / 255.f, 1.f,
+        "textbox.composition"};
+
+    std::function<void(std::string)> on_change;
+    std::function<void()> on_focus;
+    std::function<void()> on_blur;
+
+    textbox_widget();
+    ~textbox_widget() override;
+
+    void render(nanovg_context ctx) override;
+    void update(update_context &ctx) override;
+
+    float measure_height(update_context &ctx) override;
+    float measure_width(update_context &ctx) override;
+
+    void focus();
+    void blur();
+    void select_all();
+    void select_range(int start, int end);
+    int selection_start() const;
+    int selection_end() const;
+    void set_selection(int start, int end);
+    void insert_text(const std::string &new_text);
+    void delete_text(int start, int end);
+    void clear();
+    void copy();
+    void cut();
+    void paste();
+
+  private:
+    int caret_index = 0;
+    int selection_anchor_index = 0;
+    float horizontal_scroll = 0;
+    float vertical_scroll = 0;
+    float caret_blink_elapsed = 0;
+    bool dragging_selection = false;
+    bool last_focused = false;
+    std::optional<float> preferred_caret_x;
+
+    void clamp_indices();
+    void reset_caret_blink();
+    void notify_change(update_context &ctx);
 };
 
 // A widget that renders children in it with a padding
