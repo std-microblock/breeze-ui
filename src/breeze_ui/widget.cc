@@ -1123,6 +1123,10 @@ void ui::textbox_widget::update(update_context &ctx) {
                             ctx.key_down(GLFW_KEY_RIGHT_SHIFT);
     const bool ctrl_down = ctx.key_down(GLFW_KEY_LEFT_CONTROL) ||
                            ctx.key_down(GLFW_KEY_RIGHT_CONTROL);
+    const bool alt_down = ctx.key_down(GLFW_KEY_LEFT_ALT) ||
+                          ctx.key_down(GLFW_KEY_RIGHT_ALT);
+    const bool super_down = ctx.key_down(GLFW_KEY_LEFT_SUPER) ||
+                            ctx.key_down(GLFW_KEY_RIGHT_SUPER);
     const float inner_width =
         std::max(width->dest() - padding_x * 2.0f, 1.0f);
     const float inner_height =
@@ -1255,40 +1259,165 @@ void ui::textbox_widget::update(update_context &ctx) {
     }
 
     bool text_changed = false;
+    bool suppress_text_input = false;
     if (is_focused) {
         ctx.need_repaint = true;
         caret_blink_elapsed += ctx.delta_time;
 
+        auto ready_key_batch = [&]() -> std::optional<textbox_widget::pending_key_batch> {
+            if (pending_key_batches.empty()) {
+                return std::nullopt;
+            }
+            if (!std::ranges::all_of(pending_key_batches.front().events,
+                                     [](const auto &event) {
+                                         return event.resolved;
+                                     })) {
+                return std::nullopt;
+            }
+            auto batch = std::move(pending_key_batches.front());
+            pending_key_batches.pop_front();
+            return batch;
+        }();
+
+        std::vector<int> current_triggered_keys;
+        current_triggered_keys.reserve(8);
+        for (int key = 0; key <= GLFW_KEY_LAST; ++key) {
+            if (ctx.key_triggered(key)) {
+                current_triggered_keys.push_back(key);
+            }
+        }
+
+        bool deferred_current_key_batch = false;
+        if (on_key_down && !current_triggered_keys.empty()) {
+            deferred_current_key_batch = true;
+
+            pending_key_batch batch;
+            batch.id = next_pending_key_batch_id++;
+            batch.shift_down = shift_down;
+            batch.ctrl_down = ctrl_down;
+            batch.alt_down = alt_down;
+            batch.super_down = super_down;
+            batch.text_input = ctx.text_input();
+            batch.events.reserve(current_triggered_keys.size());
+            for (int key : current_triggered_keys) {
+                batch.events.push_back({.key = key});
+                ctx.stop_key_propagation(key);
+            }
+
+            auto weak_self = std::weak_ptr<textbox_widget>(
+                std::dynamic_pointer_cast<textbox_widget>(shared_from_this()));
+            auto callback = on_key_down;
+            const auto batch_id = batch.id;
+            const auto event_count = batch.events.size();
+            pending_key_batches.push_back(std::move(batch));
+
+            for (size_t i = 0; i < event_count; ++i) {
+                const int key = current_triggered_keys[i];
+                ctx.rt.post_loop_thread_task(
+                    [weak_self, callback, batch_id, event_index = i, key,
+                     shift = shift_down, ctrl = ctrl_down, alt = alt_down,
+                     super = super_down]() mutable {
+                        const bool canceled =
+                            callback ? callback(key, shift, ctrl, alt, super)
+                                     : false;
+                        auto self = weak_self.lock();
+                        if (!self || !self->owner_rt) {
+                            return;
+                        }
+                        std::lock_guard lock(self->owner_rt->rt_lock);
+                        auto it = std::find_if(
+                            self->pending_key_batches.begin(),
+                            self->pending_key_batches.end(),
+                            [batch_id](const auto &candidate) {
+                                return candidate.id == batch_id;
+                            });
+                        if (it == self->pending_key_batches.end() ||
+                            event_index >= it->events.size()) {
+                            return;
+                        }
+                        it->events[event_index].canceled = canceled;
+                        it->events[event_index].resolved = true;
+                        self->needs_repaint = true;
+                    },
+                    true);
+            }
+        }
+
+        std::vector<unsigned char> active_keys(GLFW_KEY_LAST + 1, 0);
+        bool processing_current_frame_keys = false;
+        const auto *typed_input = &ctx.text_input();
+        bool active_shift_down = shift_down;
+        bool active_ctrl_down = ctrl_down;
+        bool active_alt_down = alt_down;
+        bool active_super_down = super_down;
+
+        if (ready_key_batch) {
+            active_shift_down = ready_key_batch->shift_down;
+            active_ctrl_down = ready_key_batch->ctrl_down;
+            active_alt_down = ready_key_batch->alt_down;
+            active_super_down = ready_key_batch->super_down;
+            typed_input = &ready_key_batch->text_input;
+
+            for (const auto &event : ready_key_batch->events) {
+                if (event.canceled) {
+                    if (!active_ctrl_down && !active_alt_down &&
+                        !active_super_down) {
+                        suppress_text_input = true;
+                    }
+                    continue;
+                }
+                active_keys[event.key] = 1;
+            }
+        } else if (!deferred_current_key_batch) {
+            processing_current_frame_keys = true;
+            for (int key : current_triggered_keys) {
+                active_keys[key] = 1;
+            }
+        } else {
+            static const std::u32string empty_input;
+            typed_input = &empty_input;
+        }
+
+        auto key_triggered = [&](int key) {
+            return key >= 0 && key < static_cast<int>(active_keys.size()) &&
+                   active_keys[static_cast<size_t>(key)] != 0;
+        };
+        auto stop_key_propagation = [&](int key) {
+            if (processing_current_frame_keys) {
+                ctx.stop_key_propagation(key);
+            }
+        };
+
         if (!ime_active) {
-            if (ctrl_down && ctx.key_triggered(GLFW_KEY_A)) {
+            if (active_ctrl_down && key_triggered(GLFW_KEY_A)) {
                 selection_anchor_index = 0;
                 caret_index = build_utf8_index_map(text).char_count();
-                ctx.stop_key_propagation(GLFW_KEY_A);
+                stop_key_propagation(GLFW_KEY_A);
                 reset_caret_blink();
                 rebuild_layouts();
             }
 
-            if (ctrl_down && ctx.key_triggered(GLFW_KEY_C)) {
+            if (active_ctrl_down && key_triggered(GLFW_KEY_C)) {
                 copy();
-                ctx.stop_key_propagation(GLFW_KEY_C);
+                stop_key_propagation(GLFW_KEY_C);
             }
 
-            if (ctrl_down && ctx.key_triggered(GLFW_KEY_X)) {
+            if (active_ctrl_down && key_triggered(GLFW_KEY_X)) {
                 copy();
                 text_changed |= delete_selection_or(selection_start(),
                                                     selection_end());
-                ctx.stop_key_propagation(GLFW_KEY_X);
+                stop_key_propagation(GLFW_KEY_X);
             }
 
-            if (ctrl_down && ctx.key_triggered(GLFW_KEY_V)) {
+            if (active_ctrl_down && key_triggered(GLFW_KEY_V)) {
                 if (const char *clipboard = glfwGetClipboardString(
                         static_cast<GLFWwindow *>(ctx.window))) {
                     text_changed |= insert_text_internal(clipboard);
                 }
-                ctx.stop_key_propagation(GLFW_KEY_V);
+                stop_key_propagation(GLFW_KEY_V);
             }
 
-            if (ctx.key_triggered(GLFW_KEY_BACKSPACE)) {
+            if (key_triggered(GLFW_KEY_BACKSPACE)) {
                 if (selection_start() != selection_end()) {
                     text_changed |=
                         delete_selection_or(selection_start(), selection_end());
@@ -1297,10 +1426,10 @@ void ui::textbox_widget::update(update_context &ctx) {
                         delete_selection_or(caret_index - 1, caret_index);
                 }
                 preferred_caret_x.reset();
-                ctx.stop_key_propagation(GLFW_KEY_BACKSPACE);
+                stop_key_propagation(GLFW_KEY_BACKSPACE);
             }
 
-            if (ctx.key_triggered(GLFW_KEY_DELETE)) {
+            if (key_triggered(GLFW_KEY_DELETE)) {
                 if (selection_start() != selection_end()) {
                     text_changed |=
                         delete_selection_or(selection_start(), selection_end());
@@ -1312,57 +1441,57 @@ void ui::textbox_widget::update(update_context &ctx) {
                     }
                 }
                 preferred_caret_x.reset();
-                ctx.stop_key_propagation(GLFW_KEY_DELETE);
+                stop_key_propagation(GLFW_KEY_DELETE);
             }
 
-            if (ctx.key_triggered(GLFW_KEY_LEFT)) {
-                if (!shift_down && selection_start() != selection_end()) {
+            if (key_triggered(GLFW_KEY_LEFT)) {
+                if (!active_shift_down && selection_start() != selection_end()) {
                     move_caret(selection_start(), false);
                 } else {
-                    move_caret(caret_index - 1, shift_down);
+                    move_caret(caret_index - 1, active_shift_down);
                 }
                 preferred_caret_x.reset();
-                ctx.stop_key_propagation(GLFW_KEY_LEFT);
+                stop_key_propagation(GLFW_KEY_LEFT);
             }
 
-            if (ctx.key_triggered(GLFW_KEY_RIGHT)) {
-                if (!shift_down && selection_start() != selection_end()) {
+            if (key_triggered(GLFW_KEY_RIGHT)) {
+                if (!active_shift_down && selection_start() != selection_end()) {
                     move_caret(selection_end(), false);
                 } else {
-                    move_caret(caret_index + 1, shift_down);
+                    move_caret(caret_index + 1, active_shift_down);
                 }
                 preferred_caret_x.reset();
-                ctx.stop_key_propagation(GLFW_KEY_RIGHT);
+                stop_key_propagation(GLFW_KEY_RIGHT);
             }
 
-            if (ctx.key_triggered(GLFW_KEY_HOME)) {
-                if (ctrl_down || !multiline) {
-                    move_caret(0, shift_down);
+            if (key_triggered(GLFW_KEY_HOME)) {
+                if (active_ctrl_down || !multiline) {
+                    move_caret(0, active_shift_down);
                 } else {
                     const auto row =
                         layout.rows[static_cast<size_t>(find_row_for_index(
                             layout, caret_index))];
-                    move_caret(row.start, shift_down);
+                    move_caret(row.start, active_shift_down);
                 }
                 preferred_caret_x.reset();
-                ctx.stop_key_propagation(GLFW_KEY_HOME);
+                stop_key_propagation(GLFW_KEY_HOME);
             }
 
-            if (ctx.key_triggered(GLFW_KEY_END)) {
-                if (ctrl_down || !multiline) {
+            if (key_triggered(GLFW_KEY_END)) {
+                if (active_ctrl_down || !multiline) {
                     move_caret(build_utf8_index_map(text).char_count(),
-                               shift_down);
+                               active_shift_down);
                 } else {
                     const auto row =
                         layout.rows[static_cast<size_t>(find_row_for_index(
                             layout, caret_index))];
-                    move_caret(row.end, shift_down);
+                    move_caret(row.end, active_shift_down);
                 }
                 preferred_caret_x.reset();
-                ctx.stop_key_propagation(GLFW_KEY_END);
+                stop_key_propagation(GLFW_KEY_END);
             }
 
-            if (multiline && ctx.key_triggered(GLFW_KEY_UP)) {
+            if (multiline && key_triggered(GLFW_KEY_UP)) {
                 const auto row_index = find_row_for_index(layout, caret_index);
                 const auto &row = layout.rows[static_cast<size_t>(row_index)];
                 const float target_x = preferred_caret_x.value_or(
@@ -1370,11 +1499,12 @@ void ui::textbox_widget::update(update_context &ctx) {
                 preferred_caret_x = target_x;
                 const auto next_row =
                     layout.rows[static_cast<size_t>(std::max(row_index - 1, 0))];
-                move_caret(caret_index_from_x(next_row, target_x), shift_down);
-                ctx.stop_key_propagation(GLFW_KEY_UP);
+                move_caret(caret_index_from_x(next_row, target_x),
+                           active_shift_down);
+                stop_key_propagation(GLFW_KEY_UP);
             }
 
-            if (multiline && ctx.key_triggered(GLFW_KEY_DOWN)) {
+            if (multiline && key_triggered(GLFW_KEY_DOWN)) {
                 const auto row_index = find_row_for_index(layout, caret_index);
                 const auto &row = layout.rows[static_cast<size_t>(row_index)];
                 const float target_x = preferred_caret_x.value_or(
@@ -1382,23 +1512,20 @@ void ui::textbox_widget::update(update_context &ctx) {
                 preferred_caret_x = target_x;
                 const auto next_row = layout.rows[static_cast<size_t>(std::min(
                     row_index + 1, static_cast<int>(layout.rows.size()) - 1))];
-                move_caret(caret_index_from_x(next_row, target_x), shift_down);
-                ctx.stop_key_propagation(GLFW_KEY_DOWN);
+                move_caret(caret_index_from_x(next_row, target_x),
+                           active_shift_down);
+                stop_key_propagation(GLFW_KEY_DOWN);
             }
 
-            if (multiline && ctx.key_triggered(GLFW_KEY_ENTER)) {
+            if (multiline && key_triggered(GLFW_KEY_ENTER)) {
                 text_changed |= insert_text_internal("\n");
                 preferred_caret_x.reset();
-                ctx.stop_key_propagation(GLFW_KEY_ENTER);
+                stop_key_propagation(GLFW_KEY_ENTER);
             }
 
-            if (!readonly) {
-                const auto &typed = ctx.text_input();
-                if (!typed.empty()) {
-                    text_changed |=
-                        insert_text_internal(utf8_from_codepoints(typed));
-                    preferred_caret_x.reset();
-                }
+            if (!readonly && !typed_input->empty() && !suppress_text_input) {
+                text_changed |= insert_text_internal(utf8_from_codepoints(*typed_input));
+                preferred_caret_x.reset();
             }
         }
     } else {
@@ -1468,6 +1595,7 @@ void ui::textbox_widget::update(update_context &ctx) {
         auto callback = focused_now ? on_focus : on_blur;
         if (!focused_now) {
             ctx.rt.clear_ime_composition();
+            pending_key_batches.clear();
         }
         if (callback) {
             ctx.rt.post_loop_thread_task([callback]() mutable { callback(); },
@@ -1505,6 +1633,7 @@ void ui::textbox_widget::blur() {
     set_focus(false);
     dragging_selection = false;
     preferred_caret_x.reset();
+    pending_key_batches.clear();
 }
 
 void ui::textbox_widget::select_all() {

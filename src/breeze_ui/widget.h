@@ -3,6 +3,8 @@
 #include "breeze_ui/nanovg_wrapper.h"
 
 #include <cmath>
+#include <cstdint>
+#include <deque>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -354,6 +356,7 @@ struct textbox_widget : public widget {
     std::function<void(std::string)> on_change;
     std::function<void()> on_focus;
     std::function<void()> on_blur;
+    std::function<bool(int, bool, bool, bool, bool)> on_key_down;
 
     textbox_widget();
     ~textbox_widget() override;
@@ -379,6 +382,21 @@ struct textbox_widget : public widget {
     void paste();
 
   private:
+    struct pending_key_event {
+        int key = 0;
+        bool canceled = false;
+        bool resolved = false;
+    };
+    struct pending_key_batch {
+        std::uint64_t id = 0;
+        bool shift_down = false;
+        bool ctrl_down = false;
+        bool alt_down = false;
+        bool super_down = false;
+        std::u32string text_input;
+        std::vector<pending_key_event> events;
+    };
+
     int caret_index = 0;
     int selection_anchor_index = 0;
     float horizontal_scroll = 0;
@@ -387,6 +405,8 @@ struct textbox_widget : public widget {
     bool dragging_selection = false;
     bool last_focused = false;
     std::optional<float> preferred_caret_x;
+    std::uint64_t next_pending_key_batch_id = 1;
+    std::deque<pending_key_batch> pending_key_batches;
 
     void clamp_indices();
     void reset_caret_blink();
