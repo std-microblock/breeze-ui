@@ -15,6 +15,7 @@
 
 #include "breeze_ui/ui.h"
 
+#include "breeze_ui/font.h"
 #include "breeze_ui/widget.h"
 
 #include "nanovg.h"
@@ -490,6 +491,7 @@ render_target::~render_target() {
     }
 
     if (nvg) {
+        clear_font_registry(nvg);
         nvgDeleteGL3(nvg);
     }
 

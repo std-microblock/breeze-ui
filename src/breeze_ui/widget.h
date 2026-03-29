@@ -292,6 +292,7 @@ struct flex_widget : public widget {
 struct text_widget : public widget {
     std::string text;
     float font_size = 14;
+    int font_weight = 400;
     std::string font_family = "main";
     animated_color color = {this, 0, 0, 0, 1, "txt"};
     float max_width = -1; // <=0 means no limit
@@ -310,6 +311,7 @@ struct textbox_widget : public widget {
     std::string text;
     std::string placeholder;
     float font_size = 14;
+    int font_weight = 400;
     float padding_x = 8;
     float padding_y = 6;
     float border_radius = 6;

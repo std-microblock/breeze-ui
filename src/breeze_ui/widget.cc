@@ -1,3 +1,4 @@
+#include "breeze_ui/font.h"
 #include "breeze_ui/widget.h"
 #include "breeze_ui/ui.h"
 #include <algorithm>
@@ -10,6 +11,15 @@
 #include "simdutf.h"
 
 namespace {
+void apply_font_face(ui::nanovg_context &ctx, std::string_view family,
+                     int weight) {
+    auto font_face = ui::resolve_font_face_name(ctx.ctx, family, weight);
+    if (font_face.empty()) {
+        font_face = std::string(family);
+    }
+    ctx.fontFace(font_face.c_str());
+}
+
 struct utf8_index_map {
     std::vector<int> byte_offsets = {0};
 
@@ -242,12 +252,13 @@ textbox_visual_state make_textbox_visual_state(
 
 textbox_layout build_textbox_layout(ui::nanovg_context &vg,
                                     std::string_view text, float font_size,
-                                    bool multiline, float inner_width,
+                                    int font_weight, bool multiline,
+                                    float inner_width,
                                     float line_height_multiplier) {
     textbox_layout layout;
 
     vg.fontSize(font_size);
-    vg.fontFace("main");
+    apply_font_face(vg, "main", font_weight);
     vg.textAlign(NVG_ALIGN_TOP | NVG_ALIGN_LEFT);
     vg.textMetrics(&layout.ascender, &layout.descender, &layout.line_height);
     layout.line_height =
@@ -297,8 +308,6 @@ textbox_layout build_textbox_layout(ui::nanovg_context &vg,
 
                     const auto row_start_byte =
                         static_cast<int>(row_data[0].start - line_text.c_str());
-                    const auto row_end_byte =
-                        static_cast<int>(row_data[0].end - line_text.c_str());
                     const auto row_next_byte =
                         static_cast<int>(row_data[0].next - line_text.c_str());
                     const bool soft_wrap_to_next = row_data[0].next < end;
@@ -931,7 +940,7 @@ void ui::text_widget::render(nanovg_context ctx) {
     ctx.fontSize(font_size);
     ctx.fillColor(color.nvg());
     ctx.textAlign(NVG_ALIGN_TOP | NVG_ALIGN_LEFT);
-    ctx.fontFace(font_family.c_str());
+    apply_font_face(ctx, font_family, font_weight);
 
     if (max_width > 0) {
         ctx.textBox(*x, *y + _yoffset_when_update, max_width, text.c_str(),
@@ -944,7 +953,7 @@ void ui::text_widget::render(nanovg_context ctx) {
 void ui::text_widget::update(update_context &ctx) {
     widget::update(ctx);
     ctx.vg.fontSize(font_size);
-    ctx.vg.fontFace(font_family.c_str());
+    apply_font_face(ctx.vg, font_family, font_weight);
     ctx.vg.textAlign(NVG_ALIGN_TOP | NVG_ALIGN_LEFT);
 
     auto [w, h, yoffset] =
@@ -1008,7 +1017,7 @@ void ui::textbox_widget::render(nanovg_context ctx) {
         text, selection_start(), selection_end(), caret_index, multiline,
         ime_active ? &ime : nullptr);
     const auto layout = build_textbox_layout(layout_vg, visual.text, font_size,
-                                             multiline, inner_width,
+                                             font_weight, multiline, inner_width,
                                              line_height_multiplier);
 
     const auto fill_color = disabled ? disabled_background_color.nvg()
@@ -1018,20 +1027,26 @@ void ui::textbox_widget::render(nanovg_context ctx) {
         is_focused ? focus_border_color.nvg() : border_color.nvg();
     const auto foreground_color =
         disabled ? disabled_text_color.nvg() : text_color.nvg();
+    const float border_width = is_focused ? 2.0f : 1.0f;
+    const float border_inset = border_width * 0.5f;
 
     ctx.fillColor(fill_color);
     ctx.fillRoundedRect(*x, *y, *width, *height, border_radius);
-    ctx.strokeWidth(is_focused ? 2.0f : 1.0f);
+    ctx.strokeWidth(border_width);
     ctx.strokeColor(border_paint);
-    ctx.strokeRoundedRect(*x, *y, *width, *height, border_radius);
+    ctx.strokeRoundedRect(*x + border_inset, *y + border_inset,
+                          std::max(*width - border_width, 0.0f),
+                          std::max(*height - border_width, 0.0f),
+                          std::max(border_radius - border_inset, 0.0f));
 
     auto t = ctx.transaction();
-    ctx.scissor(*x + 1, *y + 1, std::max(*width - 2.0f, 0.0f),
-                std::max(*height - 2.0f, 0.0f));
+    ctx.scissor(*x + border_width, *y + border_width,
+                std::max(*width - border_width * 2.0f, 0.0f),
+                std::max(*height - border_width * 2.0f, 0.0f));
     ctx.translate(*x + padding_x - horizontal_scroll,
                   *y + padding_y - vertical_scroll);
     ctx.fontSize(font_size);
-    ctx.fontFace("main");
+    apply_font_face(ctx, "main", font_weight);
     ctx.textAlign(NVG_ALIGN_TOP | NVG_ALIGN_LEFT);
 
     const int selection_begin = visual.selection_start;
@@ -1113,18 +1128,18 @@ void ui::textbox_widget::update(update_context &ctx) {
     const float inner_height =
         std::max(height->dest() - padding_y * 2.0f, 1.0f);
     auto layout =
-        build_textbox_layout(ctx.vg, text, font_size, multiline, inner_width,
+        build_textbox_layout(ctx.vg, text, font_size, font_weight, multiline, inner_width,
                              line_height_multiplier);
     auto visual = make_textbox_visual_state(text, selection_start(),
                                             selection_end(), caret_index,
                                             multiline);
     auto visual_layout =
-        build_textbox_layout(ctx.vg, visual.text, font_size, multiline,
+        build_textbox_layout(ctx.vg, visual.text, font_size, font_weight, multiline,
                              inner_width, line_height_multiplier);
 
     auto rebuild_layouts = [&]() {
         layout =
-            build_textbox_layout(ctx.vg, text, font_size, multiline,
+            build_textbox_layout(ctx.vg, text, font_size, font_weight, multiline,
                                  inner_width, line_height_multiplier);
         const auto &ime = ctx.ime_composition();
         const bool ime_active = focused() && !disabled && ime.active;
@@ -1133,7 +1148,7 @@ void ui::textbox_widget::update(update_context &ctx) {
                                            multiline,
                                            ime_active ? &ime : nullptr);
         visual_layout =
-            build_textbox_layout(ctx.vg, visual.text, font_size, multiline,
+            build_textbox_layout(ctx.vg, visual.text, font_size, font_weight, multiline,
                                  inner_width, line_height_multiplier);
     };
 
@@ -1788,7 +1803,7 @@ void ui::widget::remove_child(std::shared_ptr<widget> child) {
 }
 float ui::text_widget::measure_height(update_context &ctx) {
     ctx.vg.fontSize(font_size);
-    ctx.vg.fontFace(font_family.c_str());
+    apply_font_face(ctx.vg, font_family, font_weight);
     auto text = max_width < 0
                     ? ctx.vg.measureText(this->text.c_str())
                     : ctx.vg.measureTextBox(this->text.c_str(), max_width);
@@ -1796,7 +1811,7 @@ float ui::text_widget::measure_height(update_context &ctx) {
 }
 float ui::text_widget::measure_width(update_context &ctx) {
     ctx.vg.fontSize(font_size);
-    ctx.vg.fontFace(font_family.c_str());
+    apply_font_face(ctx.vg, font_family, font_weight);
     auto text = max_width < 0
                     ? ctx.vg.measureText(this->text.c_str())
                     : ctx.vg.measureTextBox(this->text.c_str(), max_width);
