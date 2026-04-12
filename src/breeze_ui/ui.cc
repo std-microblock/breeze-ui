@@ -92,10 +92,10 @@ void sync_ime_window_position(HWND hwnd, bool active, int caret_x, int caret_y,
     exclude_form.dwIndex = 0;
     exclude_form.dwStyle = CFS_EXCLUDE;
     exclude_form.ptCurrentPos = POINT{caret_x, candidate_y};
-    const int exclude_left = std::clamp(caret_x - 1, document_x,
-                                        document_x + std::max(document_width, 1));
-    const int exclude_top = std::clamp(caret_y, document_y,
-                                       document_y + std::max(document_height, 1));
+    const int exclude_left = std::clamp(
+        caret_x - 1, document_x, document_x + std::max(document_width, 1));
+    const int exclude_top = std::clamp(
+        caret_y, document_y, document_y + std::max(document_height, 1));
     const int exclude_right =
         std::clamp(caret_x + 1, exclude_left + 1,
                    document_x + std::max(document_width, 1));
@@ -491,8 +491,14 @@ render_target::~render_target() {
     }
 
     if (nvg) {
+        if (window) {
+            glfwMakeContextCurrent(window);
+        }
         clear_font_registry(nvg);
         nvgDeleteGL3(nvg);
+        if (window) {
+            glfwMakeContextCurrent(nullptr);
+        }
     }
 
     glfwDestroyWindow(window);
@@ -779,9 +785,9 @@ void render_target::set_ime_caret_rect(float x, float y, float height,
     const int doc_y = ime_document_y;
     const int doc_width = ime_document_width;
     const int doc_height = ime_document_height;
-    post_main_thread_task([hwnd, owner = reinterpret_cast<HANDLE>(this), caret_x,
-                           caret_y, caret_height, doc_x, doc_y, doc_width,
-                           doc_height] {
+    post_main_thread_task([hwnd, owner = reinterpret_cast<HANDLE>(this),
+                           caret_x, caret_y, caret_height, doc_x, doc_y,
+                           doc_width, doc_height] {
         if (!IsWindow(hwnd) || GetPropW(hwnd, kRenderTargetPropName) != owner) {
             return;
         }

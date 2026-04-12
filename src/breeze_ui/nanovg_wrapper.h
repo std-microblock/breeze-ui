@@ -307,6 +307,8 @@ struct NVGImage {
 
     NVGImage(NVGImage &&other) = default;
     NVGImage &operator=(NVGImage &&other) = default;
+    NVGImage(const NVGImage &) = delete;
+    NVGImage &operator=(const NVGImage &) = delete;
 
     inline ~NVGImage() {
         // if (id != -1)
