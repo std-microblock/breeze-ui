@@ -7,7 +7,7 @@ add_rules("mode.releasedbg")
 includes("deps/glfw.lua")
 
 add_requires("breeze-glfw", {alias = "glfw"})
-add_requires("glad")
+add_requires("glad 0.1.36")
 add_requires("simdutf")
 
 target("breeze-nanovg")
