@@ -37,7 +37,7 @@ target("breeze_ui")
     add_deps("breeze-nanovg", "breeze-nanosvg", {
         public = true
     })
-    add_syslinks("dwmapi", "imm32", "shcore", "windowsapp", "CoreMessaging")
+    add_syslinks("dwmapi", "advapi32", "imm32", "shcore", "windowsapp", "CoreMessaging")
     add_files("src/breeze_ui/*.cc")
     add_headerfiles("src/(breeze_ui/*.h)")
     add_includedirs("src/", {

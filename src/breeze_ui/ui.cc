@@ -4,9 +4,12 @@
 #include <dwmapi.h>
 #include <future>
 #include <imm.h>
+#include <mutex>
+#include <optional>
 #include <print>
 #include <stacktrace>
 #include <thread>
+#include <unordered_map>
 
 #define GLFW_INCLUDE_GLEXT
 #include "GLFW/glfw3.h"
@@ -109,6 +112,92 @@ void sync_ime_window_position(HWND hwnd, bool active, int caret_x, int caret_y,
     ImmReleaseContext(hwnd, himc);
 }
 
+bool system_uses_light_theme() {
+    DWORD value = 1;
+    DWORD size = sizeof(value);
+    RegGetValueW(
+        HKEY_CURRENT_USER,
+        L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
+        L"AppsUseLightTheme", RRF_RT_REG_DWORD, nullptr, &value, &size);
+    return value != 0;
+}
+
+void apply_titlebar_theme(HWND hwnd) {
+    constexpr DWORD kImmersiveDarkMode = 20;
+    constexpr DWORD kImmersiveDarkModeBefore20H1 = 19;
+    BOOL dark = !system_uses_light_theme();
+    if (FAILED(DwmSetWindowAttribute(hwnd, kImmersiveDarkMode, &dark,
+                                     sizeof(dark)))) {
+        DwmSetWindowAttribute(hwnd, kImmersiveDarkModeBefore20H1, &dark,
+                              sizeof(dark));
+    }
+}
+
+struct module_icon_resource {
+    HMODULE module = nullptr;
+    std::wstring name;
+    WORD id = 0;
+
+    LPCWSTR resource() const {
+        return id ? MAKEINTRESOURCEW(id) : name.c_str();
+    }
+};
+
+std::optional<module_icon_resource> find_own_module_icon() {
+    module_icon_resource icon;
+    GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                           GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                       reinterpret_cast<LPCWSTR>(&find_own_module_icon),
+                       &icon.module);
+    if (!icon.module) {
+        return std::nullopt;
+    }
+    EnumResourceNamesW(
+        icon.module, reinterpret_cast<LPCWSTR>(RT_GROUP_ICON),
+        [](HMODULE, LPCWSTR, LPWSTR name, LONG_PTR param) -> BOOL {
+            auto &icon = *reinterpret_cast<module_icon_resource *>(param);
+            if (IS_INTRESOURCE(name)) {
+                icon.id = static_cast<WORD>(reinterpret_cast<ULONG_PTR>(name));
+            } else {
+                icon.name = name;
+            }
+            return FALSE;
+        },
+        reinterpret_cast<LONG_PTR>(&icon));
+    if (!icon.id && icon.name.empty()) {
+        return std::nullopt;
+    }
+    return icon;
+}
+
+HICON load_own_module_icon(int size) {
+    static const auto resource = find_own_module_icon();
+    static std::mutex cache_lock;
+    static std::unordered_map<int, HICON> cache;
+    if (!resource) {
+        return nullptr;
+    }
+    std::lock_guard lock(cache_lock);
+    auto &icon = cache[size];
+    if (!icon) {
+        icon = static_cast<HICON>(LoadImageW(resource->module,
+                                             resource->resource(), IMAGE_ICON,
+                                             size, size, LR_DEFAULTCOLOR));
+    }
+    return icon;
+}
+
+void apply_window_icon(HWND hwnd, UINT dpi) {
+    for (auto [type, metric] : {std::pair{ICON_SMALL, SM_CXSMICON},
+                                std::pair{ICON_BIG, SM_CXICON}}) {
+        if (auto icon =
+                load_own_module_icon(GetSystemMetricsForDpi(metric, dpi))) {
+            SendMessageW(hwnd, WM_SETICON, type,
+                         reinterpret_cast<LPARAM>(icon));
+        }
+    }
+}
+
 RECT screen_rect_from_client(HWND hwnd, int x, int y, int width, int height) {
     POINT top_left{x, y};
     POINT bottom_right{x + width, y + height};
@@ -150,6 +239,16 @@ LRESULT CALLBACK render_target_wndproc(HWND hwnd, UINT msg, WPARAM wparam,
 
     if (msg == WM_KILLFOCUS) {
         rt->clear_ime_composition();
+    }
+
+    if (msg == WM_SETTINGCHANGE && rt->decorated && lparam &&
+        std::wstring_view(reinterpret_cast<LPCWSTR>(lparam)) ==
+            L"ImmersiveColorSet") {
+        apply_titlebar_theme(hwnd);
+    }
+
+    if (msg == WM_DPICHANGED && rt->decorated) {
+        apply_window_icon(hwnd, HIWORD(wparam));
     }
 
     if (msg == WM_IME_STARTCOMPOSITION) {
@@ -350,6 +449,11 @@ std::expected<bool, std::string> render_target::init() {
     }
 
     auto h = glfwGetWin32Window(window);
+
+    if (decorated) {
+        apply_titlebar_theme(h);
+        apply_window_icon(h, GetDpiForWindow(h));
+    }
 
     if (acrylic || extend) {
         MARGINS margins = {
