@@ -328,11 +328,36 @@ inline void nanovg_context::drawImage(const NVGImage &image, float x, float y,
 }
 
 NVGImage nanovg_context::imageFromSVG(NSVGimage *image, float dpi_scale) {
-    thread_local static auto rast = nsvgCreateRasterizer();
-    int width = image->width, height = image->height;
-    width *= dpi_scale, height *= dpi_scale;
+    // Invalid input and absurd canvases must not reach the rasterizer: it writes
+    // width * height * 4 bytes into the buffer we allocate here, and the canvas is
+    // controlled by the (untrusted) SVG document.
+    if (!image || !(dpi_scale > 0))
+        return NVGImage(-1, 0, 0, *this);
 
-    auto data = (unsigned char *)malloc(width * height * 4);
+    thread_local static auto rast = nsvgCreateRasterizer();
+
+    constexpr long long kMaxRasterBytes = 64ll * 1024 * 1024;  // 64 MiB
+
+    // Round the scaled dimensions once and keep every size calculation in
+    // integers so the allocation exactly matches what nsvgRasterize() writes.
+    const long long scaled_width =
+        static_cast<long long>(image->width * dpi_scale + 0.5f);
+    const long long scaled_height =
+        static_cast<long long>(image->height * dpi_scale + 0.5f);
+
+    if (scaled_width <= 0 || scaled_height <= 0 ||
+        scaled_width * scaled_height * 4 > kMaxRasterBytes)
+        return NVGImage(-1, 0, 0, *this);
+
+    const int width = static_cast<int>(scaled_width);
+    const int height = static_cast<int>(scaled_height);
+    const size_t pixel_bytes =
+        static_cast<size_t>(width) * static_cast<size_t>(height) * 4;
+
+    auto data = (unsigned char *)malloc(pixel_bytes);
+    if (!data)
+        return NVGImage(-1, 0, 0, *this);
+
     nsvgRasterize(rast, image, 0, 0, dpi_scale, data, width, height, width * 4);
     auto id = createImageRGBA(width, height, 0, data);
     free(data);
