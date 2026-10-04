@@ -7,13 +7,8 @@
 #include <thread>
 
 namespace {
-struct demo_hover_acrylic_widget : ui::acrylic_background_widget {
-    float idle_opacity = 170.0f;
-    float hover_opacity = 255.0f;
-    float idle_radius = 20.0f;
-    float hover_radius = 32.0f;
-
-    demo_hover_acrylic_widget() : ui::acrylic_background_widget() {
+template <typename base_t> struct demo_hover_acrylic_widget : base_t {
+    demo_hover_acrylic_widget() : base_t() {
         opacity->reset_to(idle_opacity);
         opacity->set_duration(220.0f);
         opacity->set_easing(ui::easing_type::ease_in_out);
@@ -22,12 +17,28 @@ struct demo_hover_acrylic_widget : ui::acrylic_background_widget {
     }
 
     void update(ui::update_context &ctx) override {
-        ui::acrylic_background_widget::update(ctx);
+        base_t::update(ctx);
         const bool is_hovered = ctx.hovered(this);
         opacity->animate_to(is_hovered ? hover_opacity : idle_opacity);
         radius->animate_to(is_hovered ? hover_radius : idle_radius);
     }
+
+    float idle_opacity = 170.0f;
+    float hover_opacity = 255.0f;
+    float idle_radius = 20.0f;
+    float hover_radius = 32.0f;
 };
+
+std::shared_ptr<ui::text_widget> make_caption(float x, float y,
+                                              std::string text) {
+    auto caption = std::make_shared<ui::text_widget>();
+    caption->x->reset_to(x);
+    caption->y->reset_to(y);
+    caption->text = std::move(text);
+    caption->font_size = 15;
+    caption->color.reset_to({1.0f, 1.0f, 1.0f, 0.92f});
+    return caption;
+}
 } // namespace
 
 int main() {
@@ -46,31 +57,32 @@ int main() {
 
     auto root = rt.root;
 
-    auto acrylic1 = std::make_shared<demo_hover_acrylic_widget>();
-    acrylic1->x->reset_to(48);
-    acrylic1->y->reset_to(52);
-    acrylic1->width->reset_to(360);
-    acrylic1->height->reset_to(220);
-    acrylic1->idle_radius = 20.0f;
-    acrylic1->hover_radius = 28.0f;
-    acrylic1->bg_color = nvgRGBAf(0.84f, 0.90f, 0.98f, 0.22f);
-    acrylic1->acrylic_bg_color = nvgRGBAf(0.92f, 0.97f, 1.0f, 0.08f);
-    root->add_child(acrylic1);
+    auto composition = std::make_shared<
+        demo_hover_acrylic_widget<ui::acrylic_background_widget>>();
+    composition->x->reset_to(48);
+    composition->y->reset_to(96);
+    composition->width->reset_to(400);
+    composition->height->reset_to(340);
+    composition->idle_radius = 20.0f;
+    composition->hover_radius = 28.0f;
+    composition->bg_color = nvgRGBAf(0.84f, 0.90f, 0.98f, 0.22f);
+    composition->acrylic_bg_color = nvgRGBAf(0.92f, 0.97f, 1.0f, 0.08f);
+    root->add_child(composition);
+    root->add_child(make_caption(48, 68, "Windows.UI.Composition host backdrop"));
 
-    auto acrylic2 = std::make_shared<demo_hover_acrylic_widget>();
-    acrylic2->x->reset_to(280);
-    acrylic2->y->reset_to(220);
-    acrylic2->width->reset_to(520);
-    acrylic2->height->reset_to(280);
-    acrylic2->idle_opacity = 150.0f;
-    acrylic2->hover_opacity = 255.0f;
-    acrylic2->idle_radius = 28.0f;
-    acrylic2->hover_radius = 40.0f;
-    acrylic2->opacity->reset_to(acrylic2->idle_opacity);
-    acrylic2->radius->reset_to(acrylic2->idle_radius);
-    acrylic2->bg_color = nvgRGBAf(0.16f, 0.19f, 0.24f, 0.30f);
-    acrylic2->acrylic_bg_color = nvgRGBAf(0.70f, 0.80f, 0.96f, 0.05f);
-    root->add_child(acrylic2);
+    auto dwm = std::make_shared<
+        demo_hover_acrylic_widget<ui::dwm_acrylic_background_widget>>();
+    dwm->x->reset_to(500);
+    dwm->y->reset_to(96);
+    dwm->width->reset_to(400);
+    dwm->height->reset_to(340);
+    dwm->idle_opacity = 150.0f;
+    dwm->idle_radius = 20.0f;
+    dwm->hover_radius = 28.0f;
+    dwm->bg_color = nvgRGBAf(0.16f, 0.19f, 0.24f, 0.30f);
+    dwm->acrylic_bg_color = nvgRGBAf(0.70f, 0.80f, 0.96f, 0.05f);
+    root->add_child(dwm);
+    root->add_child(make_caption(500, 68, "DWM accent policy (fallback)"));
 
     auto tip = std::make_shared<ui::text_widget>();
     tip->x->reset_to(48);
