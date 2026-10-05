@@ -349,9 +349,8 @@ struct text_widget : public widget {
         bool operator==(const measure_key &) const = default;
     };
     std::optional<measure_key> last_key;
-    std::string face_key, resolved_face;
     float natural_width = 0;
-    const std::string &face(nanovg_context &ctx);
+    int face(nanovg_context &ctx) const;
 };
 
 struct textbox_widget : public widget {

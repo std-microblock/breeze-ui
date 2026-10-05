@@ -11,11 +11,7 @@
 namespace {
 void apply_font_face(ui::nanovg_context &ctx, std::string_view family,
                      int weight) {
-    auto font_face = ui::resolve_font_face_name(ctx.ctx, family, weight);
-    if (font_face.empty()) {
-        font_face = std::string(family);
-    }
-    ctx.fontFace(font_face.c_str());
+    ctx.fontFaceId(ui::resolve_font(ctx.ctx, family, weight));
 }
 
 struct utf8_index_map {

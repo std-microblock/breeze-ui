@@ -56,20 +56,6 @@ YGAlign to_yoga(ui::flex_widget::align a) {
     }
 }
 
-const std::string &cached_font_face(ui::nanovg_context &ctx,
-                                    std::string &cache_key,
-                                    std::string &cache_value,
-                                    std::string_view family, int weight) {
-    auto key = std::format("{}#{}", family, weight);
-    if (key != cache_key) {
-        cache_key = std::move(key);
-        cache_value = ui::resolve_font_face_name(ctx.ctx, family, weight);
-        if (cache_value.empty()) {
-            cache_value = std::string(family);
-        }
-    }
-    return cache_value;
-}
 } // namespace
 
 bool ui::key_event::shift() const { return mods & GLFW_MOD_SHIFT; }
@@ -580,9 +566,8 @@ void ui::padding_widget::before_layout() {
     YGNodeStyleSetPadding(node, YGEdgeBottom, *padding_bottom);
 }
 
-const std::string &ui::text_widget::face(nanovg_context &ctx) {
-    return cached_font_face(ctx, face_key, resolved_face, font_family,
-                            font_weight);
+int ui::text_widget::face(nanovg_context &ctx) const {
+    return ui::resolve_font(ctx.ctx, font_family, font_weight);
 }
 
 void ui::text_widget::before_layout() {
@@ -602,7 +587,7 @@ YGSize ui::text_widget::measure(float w, YGMeasureMode wm, float,
         return {0, 0};
     auto &vg = scope.vg;
     vg.fontSize(font_size);
-    vg.fontFace(face(vg).c_str());
+    vg.fontFaceId(face(vg));
     vg.textAlign(NVG_ALIGN_TOP | NVG_ALIGN_LEFT);
     float ascender = 0, descender = 0, line_height = 0;
     vg.textMetrics(&ascender, &descender, &line_height);
@@ -642,7 +627,7 @@ void ui::text_widget::render(nanovg_context ctx) {
     ctx.fontSize(font_size);
     ctx.fillColor(color.nvg());
     ctx.textAlign(NVG_ALIGN_TOP | NVG_ALIGN_LEFT);
-    ctx.fontFace(face(ctx).c_str());
+    ctx.fontFaceId(face(ctx));
 
     if (natural_width > width->var() + 0.5f && width->var() > 0) {
         ctx.textBox(*x, *y, width->var(), text.c_str(), nullptr);

@@ -571,6 +571,21 @@ void nvgResetFallbackFontsId(NVGcontext* ctx, int baseFont);
 // Resets fallback fonts by name.
 void nvgResetFallbackFonts(NVGcontext* ctx, const char* baseFont);
 
+typedef struct NVGcolorGlyph {
+	int image;
+	float x0, y0, x1, y1;
+} NVGcolorGlyph;
+
+// Called when no font in the chain has the codepoint; returns a font handle to append as fallback, or -1.
+typedef int (*NVGfontFallbackFn)(void* uptr, int font, unsigned int codepoint);
+
+// Called for glyphs of color fonts; the image rect is relative to the pen position on the baseline.
+typedef int (*NVGcolorGlyphFn)(void* uptr, int font, int glyph, float size, NVGcolor color, NVGcolorGlyph* out);
+
+void nvgSetFontFallbackCallback(NVGcontext* ctx, NVGfontFallbackFn fn, void* uptr);
+void nvgSetColorGlyphCallback(NVGcontext* ctx, NVGcolorGlyphFn fn, void* uptr);
+void nvgSetFontColor(NVGcontext* ctx, int font, int isColor);
+
 // Sets the font size of current text style.
 void nvgFontSize(NVGcontext* ctx, float size);
 

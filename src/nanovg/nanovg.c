@@ -131,6 +131,8 @@ struct NVGcontext {
 	struct FONScontext* fs;
 	int fontImages[NVG_MAX_FONTIMAGES];
 	int fontImageIdx;
+	NVGcolorGlyphFn colorGlyph;
+	void* colorGlyphUptr;
 	int drawCallCount;
 	int fillTriCount;
 	int strokeTriCount;
@@ -2343,6 +2345,22 @@ void nvgResetFallbackFonts(NVGcontext* ctx, const char* baseFont)
 	nvgResetFallbackFontsId(ctx, nvgFindFont(ctx, baseFont));
 }
 
+void nvgSetFontFallbackCallback(NVGcontext* ctx, NVGfontFallbackFn fn, void* uptr)
+{
+	fonsSetFallbackCallback(ctx->fs, fn, uptr);
+}
+
+void nvgSetColorGlyphCallback(NVGcontext* ctx, NVGcolorGlyphFn fn, void* uptr)
+{
+	ctx->colorGlyph = fn;
+	ctx->colorGlyphUptr = uptr;
+}
+
+void nvgSetFontColor(NVGcontext* ctx, int font, int isColor)
+{
+	fonsSetFontColor(ctx->fs, font, isColor);
+}
+
 // State setting
 void nvgFontSize(NVGcontext* ctx, float size)
 {
@@ -2476,6 +2494,50 @@ static int nvg__isTransformFlipped(const float *xform)
 	return( det < 0);
 }
 
+static int nvg__renderColorGlyph(NVGcontext* ctx, const FONStextIter* iter, float invscale)
+{
+	NVGstate* state = nvg__getState(ctx);
+	NVGcolorGlyph glyph;
+	NVGpaint paint;
+	NVGvertex verts[6];
+	float c[4*2];
+	float x0, y0, x1, y1;
+	int i;
+
+	if (ctx->colorGlyph == NULL || !fonsIsFontColor(ctx->fs, iter->prevGlyphFont))
+		return 0;
+	if (!ctx->colorGlyph(ctx->colorGlyphUptr, iter->prevGlyphFont, iter->prevGlyphIndex,
+						 iter->isize / 10.0f, state->fill.innerColor, &glyph) || glyph.image == 0)
+		return 0;
+
+	x0 = (iter->glyphX + glyph.x0) * invscale;
+	y0 = (iter->y + glyph.y0) * invscale;
+	x1 = (iter->glyphX + glyph.x1) * invscale;
+	y1 = (iter->y + glyph.y1) * invscale;
+	nvgTransformPoint(&c[0],&c[1], state->xform, x0, y0);
+	nvgTransformPoint(&c[2],&c[3], state->xform, x1, y0);
+	nvgTransformPoint(&c[4],&c[5], state->xform, x1, y1);
+	nvgTransformPoint(&c[6],&c[7], state->xform, x0, y1);
+	for (i = 0; i < 8; i++)
+		c[i] = roundf(c[i]);
+	nvg__vset(&verts[0], c[0], c[1], 0, 0);
+	nvg__vset(&verts[1], c[4], c[5], 1, 1);
+	nvg__vset(&verts[2], c[2], c[3], 1, 0);
+	nvg__vset(&verts[3], c[0], c[1], 0, 0);
+	nvg__vset(&verts[4], c[6], c[7], 0, 1);
+	nvg__vset(&verts[5], c[4], c[5], 1, 1);
+
+	memset(&paint, 0, sizeof(paint));
+	nvgTransformIdentity(paint.xform);
+	paint.image = glyph.image;
+	paint.innerColor = paint.outerColor = nvgRGBAf(1, 1, 1, state->fill.innerColor.a * state->alpha);
+
+	ctx->params.renderTriangles(ctx->params.userPtr, &paint, state->compositeOperation, &state->scissor, verts, 6, ctx->fringeWidth);
+	ctx->drawCallCount++;
+	ctx->textTriCount += 2;
+	return 1;
+}
+
 float nvgText(NVGcontext* ctx, float x, float y, const char* string, const char* end)
 {
 	NVGstate* state = nvg__getState(ctx);
@@ -2520,6 +2582,8 @@ float nvgText(NVGcontext* ctx, float x, float y, const char* string, const char*
 				break;
 		}
 		prevIter = iter;
+		if (nvg__renderColorGlyph(ctx, &iter, invscale))
+			continue;
 		if(isFlipped) {
 			float tmp;
 

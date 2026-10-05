@@ -46,7 +46,7 @@ target("breeze_ui")
     add_deps("breeze-nanovg", "breeze-nanosvg", "breeze-yoga", {
         public = true
     })
-    add_syslinks("dwmapi", "advapi32", "imm32", "shcore", "windowsapp", "CoreMessaging")
+    add_syslinks("dwmapi", "advapi32", "imm32", "shcore", "windowsapp", "CoreMessaging", "dwrite", "d2d1", "gdi32")
     add_files("src/breeze_ui/*.cc")
     add_headerfiles("src/(breeze_ui/*.h)")
     add_includedirs("src/", {
@@ -72,3 +72,10 @@ target("acrylic_demo")
     add_deps("breeze_ui")
     add_files("src/test/acrylic_demo.cc")
     add_includedirs("src/")
+
+target("font_render_test")
+    set_kind("binary")
+    add_deps("breeze_ui")
+    add_files("src/test/font_render_test.cc")
+    add_includedirs("src/")
+    set_encodings("utf-8")

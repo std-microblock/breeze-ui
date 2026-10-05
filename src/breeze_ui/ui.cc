@@ -701,6 +701,7 @@ void render_target::frame() {
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT |
                 GL_STENCIL_BUFFER_BIT);
         nanovg_context vg{nvg, this};
+        begin_font_frame(nvg);
         vg.beginFrame(fb_width, fb_height, 1);
         vg.scale(dpi_scale, dpi_scale);
         begin_acrylic_frame();
@@ -993,7 +994,7 @@ render_target::~render_target() {
         if (window) {
             glfwMakeContextCurrent(window);
         }
-        clear_font_registry(nvg);
+        release_fonts(nvg);
         nvgDeleteGL3(nvg);
         if (window) {
             glfwMakeContextCurrent(nullptr);
