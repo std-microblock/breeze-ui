@@ -667,6 +667,7 @@ uint32_t pack_color(NVGcolor color) {
 class font_manager {
 public:
     explicit font_manager(NVGcontext *nvg) : nvg_(nvg) {
+        update_locale();
         nvgSetFontFallbackCallback(nvg_, &font_manager::on_missing_glyph, this);
         nvgSetColorGlyphCallback(nvg_, &font_manager::on_color_glyph, this);
     }
@@ -685,6 +686,7 @@ public:
     void configure(ui::font_settings settings) {
         std::lock_guard lock(mutex_);
         settings_ = std::move(settings);
+        update_locale();
         families_.clear();
         bases_.clear();
     }
@@ -858,7 +860,7 @@ private:
             return -1;
         }
 
-        text_source text(utf16_of(codepoint), dw.locale);
+        text_source text(utf16_of(codepoint), locale_);
         const auto length = static_cast<UINT32>(utf16_of(codepoint).size());
         UINT32 mapped_length = 0;
         ComPtr<IDWriteFont> mapped;
@@ -958,9 +960,15 @@ private:
         return manager->find_color_glyph(font, glyph, size, color, out) ? 1 : 0;
     }
 
+    void update_locale() {
+        locale_ = settings_.locale.empty() ? dwrite().locale
+                                           : widen(settings_.locale);
+    }
+
     NVGcontext *nvg_;
     std::mutex mutex_;
     ui::font_settings settings_;
+    std::wstring locale_;
     uint64_t frame_ = 0;
     int font_serial_ = 0;
     std::map<std::string, std::unordered_map<int, int>, std::less<>> families_;

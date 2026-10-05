@@ -14,6 +14,8 @@ struct font_settings {
     std::vector<std::string> main = {"Segoe UI"};
     std::vector<std::string> monospace = {"Consolas"};
     std::vector<std::string> fallback;
+    // Selects regional glyphs (e.g. Han) in system fallback; empty follows the user locale.
+    std::string locale = "zh-CN";
     bool system_fallback = true;
     bool color_glyphs = true;
 };
