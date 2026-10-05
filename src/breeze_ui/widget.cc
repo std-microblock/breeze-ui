@@ -211,21 +211,26 @@ bool ui::flex_widget::child_axis_free(bool horizontal_axis) const {
 }
 
 void ui::widget::apply_layout_tree() {
+    const bool snap = snap_initial_layout && !laid_out;
+    auto place = [snap](sp_anim_float &v, float to) {
+        snap ? v->reset_to(to) : v->animate_to(to);
+    };
     const bool attached = attached_to_parent();
     if (attached) {
         detached_layout_valid = false;
         if (!axis_free(true))
-            x->animate_to(YGNodeLayoutGetLeft(node));
+            place(x, YGNodeLayoutGetLeft(node));
         if (!axis_free(false))
-            y->animate_to(YGNodeLayoutGetTop(node));
+            place(y, YGNodeLayoutGetTop(node));
     }
     const bool yoga_sized = attached || lays_out_children() || has_measure();
     if (!manual_size && yoga_sized) {
-        width->animate_to(YGNodeLayoutGetWidth(node));
-        height->animate_to(YGNodeLayoutGetHeight(node));
+        place(width, YGNodeLayoutGetWidth(node));
+        place(height, YGNodeLayoutGetHeight(node));
         applied_width = width->dest();
         applied_height = height->dest();
     }
+    laid_out = true;
     YGNodeSetHasNewLayout(node, false);
     after_layout();
     for (auto list : {&children, &floating}) {
@@ -357,15 +362,17 @@ bool ui::widget::hit_test(float px, float py) const {
 }
 
 void ui::widget::render(nanovg_context ctx) {
-    {
+    if (clips_children()) {
         auto t = ctx.transaction();
         auto inner = ctx;
-        if (clips_children()) {
-            ctx.intersectScissor(*x, *y, *width, *height);
-            inner.clip_to(*x, *y, *width, *height);
-        }
+        ctx.intersectScissor(*x, *y, *width, *height);
+        inner.clip_to(*x, *y, *width, *height);
         render_children(
             inner.with_offset(*x + child_offset_x(), *y + child_offset_y()),
+            children);
+    } else {
+        render_children(
+            ctx.with_offset(*x + child_offset_x(), *y + child_offset_y()),
             children);
     }
     render_children(ctx.with_offset(*x, *y), floating);

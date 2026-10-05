@@ -129,6 +129,7 @@ struct widget : std::enable_shared_from_this<widget> {
     bool hit_self = true;
     bool visible = true;
     bool needs_repaint = true;
+    bool snap_initial_layout = false;
 
     dying_time dying_time;
 
@@ -267,6 +268,7 @@ struct widget : std::enable_shared_from_this<widget> {
     friend struct render_target;
     bool is_floating = false;
     bool measure_attached = false;
+    bool laid_out = false;
     float applied_width = NAN, applied_height = NAN;
     bool detached_layout_valid = false;
     float detached_available_width = NAN, detached_available_height = NAN;

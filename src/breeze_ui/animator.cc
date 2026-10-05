@@ -57,7 +57,8 @@ void ui::animated_float::step(float delta_time) {
     } else if (easing == easing_type::ease_in) {
         value = std::lerp(from, destination, progress * progress);
     } else if (easing == easing_type::ease_out) {
-        value = std::lerp(from, destination, 1 - std::sqrt(1 - progress));
+        value = std::lerp(from, destination,
+                          1 - (1 - progress) * (1 - progress));
     } else if (easing == easing_type::ease_in_out) {
         value = std::lerp(from, destination,
                           (0.5f * std::sin(progress * std::numbers::pi -
