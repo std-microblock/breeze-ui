@@ -752,6 +752,11 @@ void ui::textbox_widget::handle_key(key_event &e) {
             return;
     }
 
+    if (!on_key_down && !multiline &&
+        (e.key == GLFW_KEY_UP || e.key == GLFW_KEY_DOWN ||
+         e.key == GLFW_KEY_ENTER))
+        return;
+
     if (on_key_down) {
         e.handled = true;
         if (pending_key_batches.empty() ||
