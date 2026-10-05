@@ -61,8 +61,12 @@ std::wstring get_ime_string(HIMC himc, DWORD which) {
 }
 
 void set_ime_composition_state(render_target *rt, ime_composition_state state) {
-    std::lock_guard lock(rt->ime_composition_lock);
-    rt->ime_composition = std::move(state);
+    {
+        std::lock_guard lock(rt->ime_composition_lock);
+        rt->ime_composition = std::move(state);
+    }
+    rt->ime_composition_dirty = true;
+    rt->request_frame();
 }
 
 void sync_ime_window_position(HWND hwnd, bool active, int caret_x, int caret_y,
@@ -652,6 +656,7 @@ void render_target::frame() {
     dispatch_input();
     bool animating = false;
     bool changed = root->tick_tree(delta_time, animating);
+    changed |= ime_composition_dirty.exchange(false);
     dispatch_focus_change();
     if (should_loop_stop_hide_as_close || glfwWindowShouldClose(window)) {
         return;
@@ -1201,8 +1206,12 @@ void render_target::set_ime_caret_rect(float x, float y, float height,
     });
 }
 void render_target::clear_ime_composition() {
-    std::lock_guard lock(ime_composition_lock);
-    ime_composition = {};
+    {
+        std::lock_guard lock(ime_composition_lock);
+        ime_composition = {};
+    }
+    ime_composition_dirty = true;
+    request_frame();
 }
 void *render_target::hwnd() const {
     return window ? glfwGetWin32Window(window) : nullptr;

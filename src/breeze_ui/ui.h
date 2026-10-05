@@ -68,6 +68,7 @@ struct render_target {
     screen_info screen{};
     ime_composition_state ime_composition;
     std::mutex ime_composition_lock{};
+    std::atomic_bool ime_composition_dirty = false;
     std::expected<bool, std::string> init();
 
     float mouse_x = -1, mouse_y = -1;
