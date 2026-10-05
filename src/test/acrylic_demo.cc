@@ -16,9 +16,9 @@ template <typename base_t> struct demo_hover_acrylic_widget : base_t {
         radius->set_easing(ui::easing_type::ease_in_out);
     }
 
-    void update(ui::update_context &ctx) override {
-        base_t::update(ctx);
-        const bool is_hovered = ctx.hovered(this);
+    void tick(float delta_time) override {
+        base_t::tick(delta_time);
+        const bool is_hovered = this->hovered();
         opacity->animate_to(is_hovered ? hover_opacity : idle_opacity);
         radius->animate_to(is_hovered ? hover_radius : idle_radius);
     }

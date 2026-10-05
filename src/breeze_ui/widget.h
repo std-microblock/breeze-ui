@@ -2,75 +2,56 @@
 #include "breeze_ui/animator.h"
 #include "breeze_ui/nanovg_wrapper.h"
 
+#include <yoga/Yoga.h>
+
 #include <cmath>
 #include <cstdint>
 #include <deque>
 #include <functional>
 #include <memory>
 #include <optional>
+#include <string>
 #include <vector>
 
 namespace ui {
 struct render_target;
 struct ime_composition_state;
 struct widget;
+
 struct screen_info {
     int width, height;
     float dpi_scale;
 };
-struct update_context {
-    // time since last frame, in milliseconds
-    float delta_time;
-    // mouse position in window coordinates
-    double mouse_x, mouse_y;
-    bool mouse_down, right_mouse_down;
-    void *window;
-    // only true for one frame
-    bool mouse_clicked, right_mouse_clicked;
-    bool mouse_up;
-    screen_info screen;
-    float scroll_y;
 
-    bool &need_repaint;
+enum class mouse_button { left = 0, right = 1, middle = 2 };
 
-    // hit test, lifetime is not guaranteed
-    std::shared_ptr<std::vector<widget *>> hovered_widgets =
-        std::make_shared<std::vector<widget *>>();
-    void set_hit_hovered(widget *w);
+struct mouse_event {
+    float x = 0, y = 0;
+    mouse_button button = mouse_button::left;
+    bool handled = false;
+};
 
-    bool hovered(widget *w, bool hittest = true) const;
-    void print_hover_info(widget *w) const;
-    bool mouse_clicked_on(widget *w, bool hittest = true) const;
-    bool mouse_down_on(widget *w, bool hittest = true) const;
+struct scroll_event {
+    float x = 0, y = 0;
+    float delta = 0;
+    bool handled = false;
+};
 
-    bool mouse_clicked_on_hit(widget *w, bool hittest = true);
-    bool hovered_hit(widget *w, bool hittest = true);
-    bool key_pressed(int key) const;
-    void stop_key_propagation(int key);
-    bool key_down(int key) const;
-    bool key_triggered(int key) const;
-    const std::u32string &text_input() const;
-    ime_composition_state ime_composition() const;
+struct key_event {
+    int key = 0;
+    int mods = 0;
+    bool repeat = false;
+    bool handled = false;
 
-    float offset_x = 0, offset_y = 0;
-    render_target &rt;
-    nanovg_context vg;
+    bool shift() const;
+    bool ctrl() const;
+    bool alt() const;
+    bool super() const;
+};
 
-    update_context with_offset(float x, float y) const {
-        auto copy = *this;
-        copy.offset_x = x + offset_x;
-        copy.offset_y = y + offset_y;
-        return copy;
-    }
-
-    update_context with_reset_offset(float x = 0, float y = 0) const {
-        auto copy = *this;
-        copy.offset_x = x;
-        copy.offset_y = y;
-        return copy;
-    }
-
-    update_context within(widget *w) const;
+struct text_input_event {
+    std::u32string text;
+    bool handled = false;
 };
 
 struct dying_time {
@@ -113,19 +94,15 @@ struct dying_time {
     }
 };
 
-/*
-All the widgets in the tree should be wrapped in a shared_ptr.
-If you want to use a widget in multiple places, you should create a new instance
-for each place.
-
-It is responsible for updating and rendering its children
-It also sets the offset for the children
-It's like `posision: relative` in CSS
-While all other widgets are like `position: absolute`
-*/
+// Frame: input -> tick -> layout -> paint. Children of non-layout widgets,
+// floating and manual_position children are laid out as detached Yoga roots.
 struct widget : std::enable_shared_from_this<widget> {
-    std::vector<sp_anim_float> anim_floats{};
+    widget();
+    widget(const widget &) = delete;
+    widget &operator=(const widget &) = delete;
+    virtual ~widget();
 
+    std::vector<sp_anim_float> anim_floats{};
     std::vector<std::string> class_list{};
     sp_anim_float anim_float(auto &&...args) {
         auto anim = std::make_shared<animated_float>(
@@ -137,80 +114,102 @@ struct widget : std::enable_shared_from_this<widget> {
     sp_anim_float x = anim_float("x"), y = anim_float("y"),
                   width = anim_float("width"), height = anim_float("height");
 
-    // Flex grow factor (0 means no growing)
     float flex_grow = 0.0f;
-    // Flex shrink factor (0 means no shrinking)
     float flex_shrink = 0.0f;
 
-    float _debug_offset_cache[2];
+    bool manual_position = false;
+    bool manual_size = false;
+    bool fixed_width = false, fixed_height = false;
     bool enable_child_clipping = false;
+    bool hit_self = true;
+    bool visible = true;
     bool needs_repaint = true;
-    float last_offset_x = 0, last_offset_y = 0;
 
-    // Time until the widget is removed from the tree
-    // in milliseconds
-    // Widget itself will update this value
-    // And its parent is responsible for removing it
-    // when the time is up
     dying_time dying_time;
 
     widget *parent = nullptr;
     render_target *owner_rt = nullptr;
+    YGNodeRef node = nullptr;
+
+    std::vector<std::shared_ptr<widget>> children;
+    std::vector<std::shared_ptr<widget>> floating;
+    bool children_dirty = false;
 
     bool focused();
     bool focus_within();
     void set_focus(bool focused = true);
+    bool hovered() const;
+    bool pressed() const;
 
-    template <typename T> inline T *search_parent() {
-        auto p = parent;
-        while (p) {
-            if (auto t = dynamic_cast<T *>(p)) {
-                return t;
-            }
-            p = p->parent;
-        }
-        return nullptr;
-    }
+    void request_repaint();
+    void mark_layout_dirty();
+
+    void set_width(float v);
+    void set_width_percent(float v);
+    void set_width_auto();
+    void set_height(float v);
+    void set_height_percent(float v);
+    void set_height_auto();
+    void set_min_width(float v);
+    void set_min_height(float v);
+    void set_max_width(float v);
+    void set_max_height(float v);
+    void set_margin(YGEdge edge, float v);
+    void set_flex_basis(float v);
+    void set_align_self(YGAlign align);
+
+    float offset_x() const;
+    float offset_y() const;
+    float abs_x() const { return offset_x() + x->var(); }
+    float abs_y() const { return offset_y() + y->var(); }
+    virtual float child_offset_x() const { return 0; }
+    virtual float child_offset_y() const { return 0; }
+    virtual bool lays_out_children() const { return false; }
+    virtual bool clips_children() const { return enable_child_clipping; }
+    virtual bool reversed_flow() const { return false; }
+
+    virtual void tick(float delta_time) {}
+    virtual void before_layout();
+    virtual void after_layout() {}
+    virtual bool has_measure() const;
+    virtual YGSize measure(float width, YGMeasureMode width_mode, float height,
+                           YGMeasureMode height_mode);
+    void invalidate_measure();
+
+    virtual bool hit_test(float px, float py) const;
+    virtual void handle_mouse_enter() {}
+    virtual void handle_mouse_leave() {}
+    virtual void handle_mouse_move(mouse_event &e) {}
+    virtual void handle_mouse_down(mouse_event &e) {}
+    virtual void handle_mouse_up(mouse_event &e) {}
+    virtual void handle_click(mouse_event &e) {}
+    virtual void handle_scroll(scroll_event &e) {}
+    virtual void handle_key(key_event &e) {}
+    virtual void handle_text_input(text_input_event &e) {}
+    virtual void handle_focus_changed(bool focused) {}
+
     virtual void render(nanovg_context ctx);
-    virtual void update(update_context &ctx);
-    virtual ~widget() = default;
-    // Measure the desired size of the widget
-    // It should return the size it wants to be, not the size it is forced to be
-    // by the parent
-    virtual float measure_height(update_context &ctx);
-    virtual float measure_width(update_context &ctx);
-    // Update children with the offset.
-    // Also deal with the dying time. (If the widget is died, it will be set to
-    // nullptr)
-    void update_child_basic(update_context &ctx, std::shared_ptr<widget> &w);
-    // Render children with the offset.
-    void render_child_basic(nanovg_context ctx, std::shared_ptr<widget> &w);
-
-    // Update children list in the widget manner
-    // It will remove the dead children
-    // It will also update the dying time
-    // It will **NOT** update the children with the offset, call it with
-    // with_offset(*x, *y) if needed
-    void update_children(update_context &ctx,
-                         std::vector<std::shared_ptr<widget>> &children);
-    // Render children list in the widget manner
     void render_children(nanovg_context ctx,
-                         std::vector<std::shared_ptr<widget>> &children);
+                         std::vector<std::shared_ptr<widget>> &list);
 
-    template <typename T> inline auto downcast() {
-        return std::dynamic_pointer_cast<T>(this->shared_from_this());
-    }
-
-    virtual bool check_hit(const update_context &ctx);
+    bool tick_tree(float delta_time, bool &animating);
+    void prepare_layout_tree(render_target *rt);
+    void apply_layout_tree();
+    void layout_detached(float available_width = YGUndefined,
+                         float available_height = YGUndefined);
+    void compute_layout_now(render_target *rt);
+    bool attached_to_parent() const;
+    virtual widget *hit_test_tree(float px, float py);
 
     void add_child(std::shared_ptr<widget> child);
+    void insert_child(size_t index, std::shared_ptr<widget> child);
     void remove_child(std::shared_ptr<widget> child);
-    std::vector<std::shared_ptr<widget>> children;
-    bool children_dirty = false;
+    void add_floating(std::shared_ptr<widget> child);
+    void remove_floating(std::shared_ptr<widget> child);
     template <typename T, typename... Args>
     inline std::shared_ptr<T> emplace_child(Args &&...args) {
         auto child = std::make_shared<T>(std::forward<Args>(args)...);
-        children.emplace_back(child);
+        add_child(child);
         return child;
     }
 
@@ -233,12 +232,46 @@ struct widget : std::enable_shared_from_this<widget> {
         }
         return res;
     }
+
+    template <typename T> inline auto downcast() {
+        return std::dynamic_pointer_cast<T>(this->shared_from_this());
+    }
+
+    template <typename T> inline T *search_parent() {
+        auto p = parent;
+        while (p) {
+            if (auto t = dynamic_cast<T *>(p)) {
+                return t;
+            }
+            p = p->parent;
+        }
+        return nullptr;
+    }
+
+    nanovg_context measure_context() const;
+
+  protected:
+    float user_width = 0, user_height = 0;
+    bool explicit_width = false, explicit_height = false;
+    void apply_user_size(bool w, bool h);
+
+  private:
+    friend struct render_target;
+    bool is_floating = false;
+    bool measure_attached = false;
+    float applied_width = NAN, applied_height = NAN;
+    void sync_yoga_children();
+    bool axis_free(bool horizontal_axis) const;
 };
 
-// A widget with child which lays out children in a row or column.
-//
-// Specifically, when `horizontal == false` and `align_items == stretch`,
-// it sets its text_widget child's max width to its width.
+struct text_measure_scope {
+    nanovg_context vg;
+    explicit text_measure_scope(const widget &w);
+    ~text_measure_scope();
+    text_measure_scope(const text_measure_scope &) = delete;
+    explicit operator bool() const { return vg.ctx != nullptr; }
+};
+
 struct flex_widget : public widget {
     enum class justify {
         start,
@@ -252,7 +285,6 @@ struct flex_widget : public widget {
 
     enum class align { start, end, center, stretch, free };
 
-    // Scrolling stuff
     float max_height = INFINITY;
     bool enable_scrolling = false;
     sp_anim_float scroll_top =
@@ -272,41 +304,54 @@ struct flex_widget : public widget {
     align align_items = align::start;
     sp_anim_float padding_left = anim_float(), padding_right = anim_float(),
                   padding_top = anim_float(), padding_bottom = anim_float();
-    void
-    reposition_children_flex(update_context &ctx,
-                             std::vector<std::shared_ptr<widget>> &children);
-    void update(update_context &ctx) override;
+
+    bool lays_out_children() const override { return true; }
+    bool clips_children() const override {
+        return enable_child_clipping || crop_overflow || enable_scrolling;
+    }
+    float child_offset_y() const override { return scroll_top->var(); }
+    bool reversed_flow() const override;
+    void before_layout() override;
+    void after_layout() override;
+    void handle_scroll(scroll_event &e) override;
     void render(nanovg_context ctx) override;
-
-    float measure_height(update_context &ctx) override;
-    float measure_width(update_context &ctx) override;
-
-    // Determine if the widget should auto size in the given direction.
-    // `should_autosize(horizontal)` checks width side.
-    // `should_autosize(!horizontal)` checks height side.
-    bool should_autosize(bool mainAxis) const;
+    void render_scrollbar(nanovg_context &ctx);
+    float max_scroll() const;
 
     struct spacer : public widget {
         float size = 1;
+        void before_layout() override;
     };
 };
-// A widget that renders text
+
 struct text_widget : public widget {
     std::string text;
     float font_size = 14;
     int font_weight = 400;
     std::string font_family = "main";
     animated_color color = {this, 0, 0, 0, 1, "txt"};
-    float max_width = -1; // <=0 means no limit
+    float max_width = -1;
+    bool shrink_vertical = true, shrink_horizontal = true;
 
     void render(nanovg_context ctx) override;
+    void before_layout() override;
+    bool has_measure() const override { return true; }
+    YGSize measure(float width, YGMeasureMode width_mode, float height,
+                   YGMeasureMode height_mode) override;
 
-    bool shrink_vertical = true, shrink_horizontal = true;
-    float _yoffset_when_update = 0;
-    void update(update_context &ctx) override;
-
-    float measure_height(update_context &ctx) override;
-    float measure_width(update_context &ctx) override;
+  private:
+    struct measure_key {
+        std::string text;
+        float font_size;
+        int font_weight;
+        std::string font_family;
+        float max_width;
+        bool operator==(const measure_key &) const = default;
+    };
+    std::optional<measure_key> last_key;
+    std::string face_key, resolved_face;
+    float natural_width = 0;
+    const std::string &face(nanovg_context &ctx);
 };
 
 struct textbox_widget : public widget {
@@ -362,10 +407,20 @@ struct textbox_widget : public widget {
     ~textbox_widget() override;
 
     void render(nanovg_context ctx) override;
-    void update(update_context &ctx) override;
+    void tick(float delta_time) override;
+    void before_layout() override;
+    void after_layout() override;
+    bool has_measure() const override { return true; }
+    YGSize measure(float width, YGMeasureMode width_mode, float height,
+                   YGMeasureMode height_mode) override;
 
-    float measure_height(update_context &ctx) override;
-    float measure_width(update_context &ctx) override;
+    void handle_mouse_down(mouse_event &e) override;
+    void handle_mouse_move(mouse_event &e) override;
+    void handle_mouse_up(mouse_event &e) override;
+    void handle_scroll(scroll_event &e) override;
+    void handle_key(key_event &e) override;
+    void handle_text_input(text_input_event &e) override;
+    void handle_focus_changed(bool focused) override;
 
     void focus();
     void blur();
@@ -389,10 +444,8 @@ struct textbox_widget : public widget {
     };
     struct pending_key_batch {
         std::uint64_t id = 0;
-        bool shift_down = false;
-        bool ctrl_down = false;
-        bool alt_down = false;
-        bool super_down = false;
+        std::uint64_t frame = 0;
+        int mods = 0;
         std::u32string text_input;
         std::vector<pending_key_event> events;
     };
@@ -403,23 +456,28 @@ struct textbox_widget : public widget {
     float vertical_scroll = 0;
     float caret_blink_elapsed = 0;
     bool dragging_selection = false;
-    bool last_focused = false;
     std::optional<float> preferred_caret_x;
     std::uint64_t next_pending_key_batch_id = 1;
     std::deque<pending_key_batch> pending_key_batches;
+    std::optional<std::tuple<bool, float, float, float, float>> measured_key;
+    std::string face_key, resolved_face;
 
     void clamp_indices();
     void reset_caret_blink();
-    void notify_change(update_context &ctx);
+    void notify_change();
+    void apply_key(int key, int mods, bool &text_changed);
+    void apply_text(const std::u32string &text, bool &text_changed);
+    void drain_key_batches();
+    void update_scroll_and_ime();
+    int caret_from_point(float px, float py);
 };
 
-// A widget that renders children in it with a padding
 struct padding_widget : public widget {
     sp_anim_float padding_left = anim_float(0), padding_right = anim_float(0),
                   padding_top = anim_float(0), padding_bottom = anim_float(0);
 
-    void update(update_context &ctx) override;
-    void render(nanovg_context ctx) override;
+    bool lays_out_children() const override { return true; }
+    void before_layout() override;
 };
 
 struct button_widget : public ui::padding_widget {
@@ -437,9 +495,8 @@ struct button_widget : public ui::padding_widget {
                                    0.6};
 
     virtual void on_click();
-
     virtual void update_colors(bool is_active, bool is_hovered);
-    ui::update_context *ctx;
-    void update(ui::update_context &ctx) override;
+    void tick(float delta_time) override;
+    void handle_mouse_down(mouse_event &e) override;
 };
 } // namespace ui

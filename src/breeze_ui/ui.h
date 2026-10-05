@@ -26,70 +26,27 @@ struct ime_composition_state {
     bool active = false;
 };
 
-template <typename T> struct flip_buffer {
-    T buffer1{}, buffer2{};
-    std::atomic_bool use_buffer2 = false;
-    mutable std::mutex buffer1_lock{}, buffer2_lock{};
+struct render_target;
 
-    T &get() { return use_buffer2 ? buffer2 : buffer1; }
-    T &get_back() { return use_buffer2 ? buffer1 : buffer2; }
-
-    std::unique_lock<std::mutex> get_front_lock() const {
-        return std::unique_lock<std::mutex>(use_buffer2 ? buffer2_lock
-                                                        : buffer1_lock);
-    }
-
-    std::unique_lock<std::mutex> get_back_lock() const {
-        return std::unique_lock<std::mutex>(use_buffer2 ? buffer1_lock
-                                                        : buffer2_lock);
-    }
-
-    template <typename U = T,
-              typename = std::enable_if_t<std::is_default_constructible_v<U>>>
-    void flip() {
-        flip(T{});
-    }
-
-    void flip(T value) {
-        {
-            std::unique_lock<std::mutex> lock(use_buffer2 ? buffer1_lock
-                                                          : buffer2_lock);
-            use_buffer2 = !use_buffer2;
-        }
-
-        std::unique_lock<std::mutex> lock(use_buffer2 ? buffer1_lock
-                                                      : buffer2_lock);
-        if (use_buffer2) {
-            buffer1 = value;
-        } else {
-            buffer2 = value;
-        }
-    }
+struct tree_lock {
+    render_target *owner = nullptr;
+    std::recursive_mutex mutex;
+    void lock() { mutex.lock(); }
+    bool try_lock() { return mutex.try_lock(); }
+    void unlock();
 };
-enum class key_state : char {
-    none = 0,
-    pressed = 1 << 1,  // Pressed
-    released = 1 << 2, // Released
-    repeated = 1 << 3, // Repeated
-};
-inline constexpr key_state &operator|=(key_state &a, key_state b) {
-    a = static_cast<key_state>(static_cast<char>(a) | static_cast<char>(b));
-    return a;
-}
-inline constexpr key_state operator&(key_state a, key_state b) {
-    return static_cast<key_state>(static_cast<char>(a) & static_cast<char>(b));
-}
-inline constexpr key_state operator|(key_state a, key_state b) {
-    return static_cast<key_state>(static_cast<char>(a) | static_cast<char>(b));
-}
 
-constexpr key_state test_pressed = key_state::pressed | key_state::repeated;
-static_assert((bool)(test_pressed & key_state::pressed),
-              "test_pressed should contain pressed state");
+struct input_record {
+    enum class kind { key, character, button, scroll } type;
+    int code = 0;
+    int action = 0;
+    int mods = 0;
+    double value = 0;
+};
 
 struct render_target {
     std::shared_ptr<widget> root;
-    GLFWwindow *window;
+    GLFWwindow *window = nullptr;
     static thread_local render_target *current;
     // float: darkness of the acrylic effect, 0~1
     std::optional<float> acrylic = {};
@@ -108,13 +65,21 @@ struct render_target {
     static std::atomic_int view_cnt;
     int view_id = view_cnt++;
     float dpi_scale = 1;
-    float scroll_y = 0;
-    flip_buffer<std::array<key_state, GLFW_KEY_LAST + 1>> key_states;
-    flip_buffer<std::u32string> char_input;
+    screen_info screen{};
     ime_composition_state ime_composition;
     std::mutex ime_composition_lock{};
-    int64_t last_repaint = 0;
     std::expected<bool, std::string> init();
+
+    float mouse_x = -1, mouse_y = -1;
+    float delta_time = 0;
+    std::uint64_t frame_index = 0;
+    int idle_poll_ms = 0;
+    bool key_down(int key) const;
+    bool is_hovered(const widget *w) const;
+    widget *hovered_widget() const;
+    void request_frame();
+    void schedule_frame(float delay_ms);
+    void refresh_screen_info();
     void begin_acrylic_frame();
     void register_acrylic_region(acrylic_region region);
     void commit_acrylic_frame();
@@ -128,7 +93,6 @@ struct render_target {
 
     static std::expected<bool, std::string> init_global();
     void start_loop();
-    void render();
     void resize(int width, int height);
     void set_position(int x, int y);
     void reset_view();
@@ -146,7 +110,7 @@ struct render_target {
     bool should_loop_stop_hide_as_close = false;
     std::optional<std::function<void(bool)>> on_focus_changed;
     std::chrono::steady_clock clock{};
-    std::recursive_mutex rt_lock{};
+    tree_lock rt_lock{this};
     std::mutex loop_thread_tasks_lock{};
     std::queue<std::function<void()>> loop_thread_tasks{};
     void post_loop_thread_task(std::function<void()> task, bool delay = false);
@@ -171,9 +135,34 @@ struct render_target {
     std::unique_ptr<acrylic_host> acrylic_host_window = nullptr;
     std::vector<acrylic_region> acrylic_regions = {};
 
+    void push_input(input_record record);
+
     render_target() = default;
     ~render_target();
     render_target operator=(const render_target &) = delete;
     render_target(const render_target &) = delete;
+
+  private:
+    std::mutex frame_mutex;
+    std::condition_variable frame_cv;
+    bool frame_requested = true;
+    std::optional<std::chrono::steady_clock::time_point> scheduled_frame;
+    std::atomic_bool screen_dirty = true;
+    std::atomic_bool force_paint = true;
+    int64_t last_paint = 0;
+    std::mutex input_lock;
+    std::vector<input_record> pending_input;
+    std::vector<widget *> hover_chain;
+    std::vector<std::weak_ptr<widget>> hover_chain_refs;
+    std::vector<std::weak_ptr<widget>> press_chain;
+    std::weak_ptr<widget> last_focused;
+
+    void wait_for_frame();
+    bool run_loop_tasks();
+    void frame();
+    void dispatch_input();
+    void update_hover(widget *target);
+    void dispatch_key(key_event &e);
+    void dispatch_focus_change();
 };
 } // namespace ui

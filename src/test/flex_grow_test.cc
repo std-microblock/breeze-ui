@@ -1,93 +1,138 @@
-#include "breeze_ui/widget.h"
 #include "breeze_ui/ui.h"
+#include "breeze_ui/widget.h"
+#include <cmath>
 #include <iostream>
 
-// Simple test to verify flex grow functionality
+namespace {
+int failures = 0;
+
+void expect(const char *name, float actual, float expected) {
+    const bool ok = std::abs(actual - expected) < 1.0f;
+    failures += !ok;
+    std::cout << (ok ? "[ok] " : "[FAIL] ") << name << ": " << actual
+              << " (expected " << expected << ")" << std::endl;
+}
+
+void layout(const std::shared_ptr<ui::widget> &root) {
+    root->prepare_layout_tree(nullptr);
+    YGNodeCalculateLayout(root->node, YGUndefined, YGUndefined,
+                          YGDirectionLTR);
+    root->apply_layout_tree();
+}
+
+std::shared_ptr<ui::widget> box(float w, float h, float grow = 0) {
+    auto child = std::make_shared<ui::widget>();
+    child->width->reset_to(w);
+    child->height->reset_to(h);
+    child->flex_grow = grow;
+    return child;
+}
+
 void test_flex_grow() {
-    // Create a horizontal flex container
     auto container = std::make_shared<ui::flex_widget>();
     container->horizontal = true;
     container->width->reset_to(400);
     container->height->reset_to(100);
     container->auto_size = false;
-    
-    // Create three children with different flex grow values
-    auto child1 = std::make_shared<ui::widget>();
-    child1->width->reset_to(50);
-    child1->height->reset_to(50);
-    child1->flex_grow = 1.0f;  // Will grow
-    
-    auto child2 = std::make_shared<ui::widget>();
-    child2->width->reset_to(100);
-    child2->height->reset_to(50);
-    child2->flex_grow = 2.0f;  // Will grow more
-    
-    auto child3 = std::make_shared<ui::widget>();
-    child3->width->reset_to(50);
-    child3->height->reset_to(50);
-    child3->flex_grow = 0.0f;  // Won't grow
-    
-    // Add children to container
+
+    auto child1 = box(50, 50, 1), child2 = box(100, 50, 2),
+         child3 = box(50, 50);
     container->add_child(child1);
     container->add_child(child2);
     container->add_child(child3);
-    
-    // Create a mock update context
-    ui::update_context ctx{
-        .delta_time = 16.67f,
-        .mouse_x = 0,
-        .mouse_y = 0,
-        .mouse_down = false,
-        .right_mouse_down = false,
-        .window = nullptr,
-        .mouse_clicked = false,
-        .right_mouse_clicked = false,
-        .mouse_up = false,
-        .screen = {800, 600, 1.0f},
-        .scroll_y = 0,
-        .need_repaint = *(new bool{false}),
-        .offset_x = 0,
-        .offset_y = 0,
-        .rt = *(new ui::render_target{}),
-        .vg = {}
-    };
-    
-    // Update the layout
-    container->update(ctx);
-    
-    // Check results
-    std::cout << "Flex Grow Test Results:" << std::endl;
-    std::cout << "Container width: " << container->width->dest() << std::endl;
-    std::cout << "Child1 width: " << child1->width->dest() << " (flex_grow: " << child1->flex_grow << ")" << std::endl;
-    std::cout << "Child2 width: " << child2->width->dest() << " (flex_grow: " << child2->flex_grow << ")" << std::endl;
-    std::cout << "Child3 width: " << child3->width->dest() << " (flex_grow: " << child3->flex_grow << ")" << std::endl;
-    
-    // Expected behavior:
-    // - Total fixed width: 50 + 100 + 50 = 200
-    // - Available space: 400 - 200 = 200
-    // - Total flex grow: 1 + 2 + 0 = 3
-    // - Child1 gets: 50 + (1/3) * 200 = 50 + 66.67 = 116.67
-    // - Child2 gets: 100 + (2/3) * 200 = 100 + 133.33 = 233.33
-    // - Child3 gets: 50 + (0/3) * 200 = 50
-    
-    float expected_child1 = 50.0f + (1.0f / 3.0f) * 200.0f;
-    float expected_child2 = 100.0f + (2.0f / 3.0f) * 200.0f;
-    float expected_child3 = 50.0f;
-    
-    std::cout << "\nExpected:" << std::endl;
-    std::cout << "Child1 width: " << expected_child1 << std::endl;
-    std::cout << "Child2 width: " << expected_child2 << std::endl;
-    std::cout << "Child3 width: " << expected_child3 << std::endl;
-    
-    bool test_passed = 
-        std::abs(child1->width->dest() - expected_child1) < 1.0f &&
-        std::abs(child2->width->dest() - expected_child2) < 1.0f &&
-        std::abs(child3->width->dest() - expected_child3) < 1.0f;
-    
-    std::cout << "\nTest " << (test_passed ? "PASSED" : "FAILED") << std::endl;
+    layout(container);
+
+    expect("grow child1", child1->width->dest(), 50.0f + 200.0f / 3.0f);
+    expect("grow child2", child2->width->dest(), 100.0f + 400.0f / 3.0f);
+    expect("grow child3", child3->width->dest(), 50.0f);
+    expect("grow child3 x", child3->x->dest(), 350.0f);
 }
+
+void test_auto_size_and_empty() {
+    auto container = std::make_shared<ui::flex_widget>();
+    container->gap = 10;
+    container->padding_left->reset_to(5);
+    container->padding_right->reset_to(5);
+    container->justify_content = ui::flex_widget::justify::space_evenly;
+    layout(container);
+    expect("empty width", container->width->dest(), 10);
+    expect("empty height", container->height->dest(), 0);
+
+    container->add_child(box(30, 20));
+    container->add_child(box(60, 20));
+    layout(container);
+    expect("auto width", container->width->dest(), 70);
+    expect("auto height", container->height->dest(), 50);
+}
+
+void test_stable_user_size() {
+    auto container = std::make_shared<ui::flex_widget>();
+    container->horizontal = true;
+    container->auto_size = false;
+    container->width->reset_to(300);
+    container->height->reset_to(40);
+    auto grown = box(50, 20, 1);
+    container->add_child(grown);
+    container->add_child(box(100, 20));
+    for (int i = 0; i < 3; ++i)
+        layout(container);
+    expect("grow is idempotent", grown->width->dest(), 200);
+    container->width->reset_to(200);
+    layout(container);
+    expect("shrinks back with parent", grown->width->dest(), 100);
+}
+
+void test_nested_auto_size() {
+    auto outer = std::make_shared<ui::flex_widget>();
+    outer->gap = 10;
+    auto row = outer->emplace_child<ui::flex_widget>();
+    row->horizontal = true;
+    row->gap = 6;
+    row->padding_top->reset_to(8);
+    row->padding_bottom->reset_to(8);
+    row->add_child(box(3, 15));
+    row->add_child(box(14, 14));
+    auto section = outer->emplace_child<ui::flex_widget>();
+    section->add_child(box(40, 20));
+    section->add_child(box(60, 30));
+    for (int i = 0; i < 3; ++i)
+        layout(outer);
+    expect("nested row width", row->width->dest(), 23);
+    expect("nested row height", row->height->dest(), 31);
+    expect("nested column height", section->height->dest(), 50);
+    expect("nested column y", section->y->dest(), 41);
+    expect("outer height", outer->height->dest(), 91);
+}
+
+void test_fixed_width_column() {
+    auto column = std::make_shared<ui::flex_widget>();
+    column->fixed_width = true;
+    column->width->reset_to(500);
+    column->gap = 20;
+    column->align_items = ui::flex_widget::align::stretch;
+    column->add_child(box(100, 24));
+    auto section = column->emplace_child<ui::flex_widget>();
+    section->gap = 10;
+    section->add_child(box(40, 20));
+    section->add_child(box(60, 30));
+    auto last = column->emplace_child<ui::flex_widget>();
+    last->add_child(box(10, 10));
+    for (int i = 0; i < 3; ++i)
+        layout(column);
+    expect("fixed-width section height", section->height->dest(), 60);
+    expect("fixed-width section width", section->width->dest(), 500);
+    expect("fixed-width last y", last->y->dest(), 124);
+    expect("fixed-width column width", column->width->dest(), 500);
+    expect("fixed-width column height", column->height->dest(), 134);
+}
+} // namespace
 
 int main() {
     test_flex_grow();
-    return 0;
+    test_auto_size_and_empty();
+    test_stable_user_size();
+    test_nested_auto_size();
+    test_fixed_width_column();
+    std::cout << (failures ? "FAILED" : "PASSED") << std::endl;
+    return failures;
 }

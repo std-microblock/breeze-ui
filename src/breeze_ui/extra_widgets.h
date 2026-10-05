@@ -26,8 +26,6 @@ struct acrylic_background_widget : public rect_widget {
     NVGcolor acrylic_bg_color = nvgRGBAf(1, 0, 0, 0);
 
     void render(nanovg_context ctx) override;
-
-    void update(update_context &ctx) override;
 };
 
 struct dwm_acrylic_background_widget : public rect_widget {
@@ -38,7 +36,7 @@ struct dwm_acrylic_background_widget : public rect_widget {
 
     void render(nanovg_context ctx) override;
 
-    void update(update_context &ctx) override;
+    void tick(float delta_time) override;
 
 private:
     void *hwnd = nullptr;

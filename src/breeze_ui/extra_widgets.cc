@@ -11,10 +11,6 @@
 #include "GLFW/glfw3native.h"
 
 namespace ui {
-void acrylic_background_widget::update(update_context &ctx) {
-    rect_widget::update(ctx);
-}
-
 void acrylic_background_widget::render(nanovg_context ctx) {
     widget::render(ctx);
 
@@ -107,7 +103,7 @@ void dwm_acrylic_background_widget::update_color() {
     pSetWindowCompositionAttribute((HWND)hwnd, &data);
 }
 
-void dwm_acrylic_background_widget::update(update_context &ctx) {
+void dwm_acrylic_background_widget::tick(float) {
     if (!render_thread) {
         auto win = glfwGetCurrentContext();
         if (!win) {
@@ -210,8 +206,8 @@ void dwm_acrylic_background_widget::update(update_context &ctx) {
         });
     }
 
-    rect_widget::update(ctx);
-    dpi_scale = ctx.rt.dpi_scale;
+    if (owner_rt)
+        dpi_scale = owner_rt->dpi_scale;
     should_update = should_update || width->updated() || height->updated() ||
                     radius->updated() || x->updated() || y->updated() ||
                     opacity->updated();

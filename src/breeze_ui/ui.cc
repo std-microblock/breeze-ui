@@ -279,8 +279,10 @@ LRESULT CALLBACK render_target_wndproc(HWND hwnd, UINT msg, WPARAM wparam,
             const auto result =
                 utf16_to_u32(get_ime_string(himc, GCS_RESULTSTR));
             if (!result.empty()) {
-                auto lock = rt->char_input.get_back_lock();
-                rt->char_input.get_back() += result;
+                for (auto ch : result) {
+                    rt->push_input({.type = input_record::kind::character,
+                                    .code = static_cast<int>(ch)});
+                }
             }
             set_ime_composition_state(rt, {});
         } else {
@@ -304,51 +306,6 @@ LRESULT CALLBACK render_target_wndproc(HWND hwnd, UINT msg, WPARAM wparam,
     return CallWindowProcW(original, hwnd, msg, wparam, lparam);
 }
 
-HMONITOR get_closest_monitor(HWND hwnd) {
-    std::vector<std::pair<HMONITOR, MONITORINFO>> monitors;
-    EnumDisplayMonitors(
-        nullptr, nullptr,
-        [](HMONITOR monitor, HDC, LPRECT, LPARAM lParam) {
-            auto &monitors = *reinterpret_cast<
-                std::vector<std::pair<HMONITOR, MONITORINFO>> *>(lParam);
-            MONITORINFO info;
-            info.cbSize = sizeof(MONITORINFO);
-
-            if (GetMonitorInfo(monitor, &info)) {
-                monitors.emplace_back(monitor, info);
-            }
-
-            return TRUE;
-        },
-        reinterpret_cast<LPARAM>(&monitors));
-
-    if (monitors.empty()) {
-        return nullptr;
-    }
-
-    HMONITOR closest_monitor = nullptr;
-    RECT window_rect;
-    GetWindowRect(hwnd, &window_rect);
-    LONG window_center_x = (window_rect.left + window_rect.right) / 2;
-    LONG window_center_y = (window_rect.top + window_rect.bottom) / 2;
-
-    LONG min_distance = LONG_MAX;
-    for (const auto &[monitor, info] : monitors) {
-        LONG monitor_center_x =
-            (info.rcMonitor.left + info.rcMonitor.right) / 2;
-        LONG monitor_center_y =
-            (info.rcMonitor.top + info.rcMonitor.bottom) / 2;
-        LONG distance = abs(monitor_center_x - window_center_x) +
-                        abs(monitor_center_y - window_center_y);
-        if (distance < min_distance) {
-            min_distance = distance;
-            closest_monitor = monitor;
-        }
-    }
-
-    return closest_monitor;
-}
-
 float get_dpi_scale_from_monitor(HMONITOR monitor) {
     UINT dpi_x, dpi_y;
     if (GetDpiForMonitor(monitor, MDT_EFFECTIVE_DPI, &dpi_x, &dpi_y) != S_OK) {
@@ -357,41 +314,435 @@ float get_dpi_scale_from_monitor(HMONITOR monitor) {
     return static_cast<float>(dpi_x) / 96.0f;
 }
 
-void render_target::start_loop() {
-    is_in_loop_thread = true;
-    glfwMakeContextCurrent(window);
-    while (!glfwWindowShouldClose(window) && !should_loop_stop_hide_as_close) {
-        sync_acrylic_host();
-        render();
-        {
-            while (true) {
-                std::unique_lock lock(loop_thread_tasks_lock);
-                if (loop_thread_tasks.empty()) {
-                    break;
-                }
-                auto fn = std::move(loop_thread_tasks.front());
-                loop_thread_tasks.pop();
-                lock.unlock();
-                if (!fn) {
-                    std::print("Warning: empty task posted to loop thread, "
-                               "skipping\n");
-                    continue;
-                }
-                try {
-                    fn();
-                } catch (const std::exception &e) {
-                    std::print(
-                        "Error: exception thrown in loop thread task: {}\n",
-                        e.what());
-                } catch (...) {
-                    std::print("Error: unknown exception thrown in loop thread "
-                               "task\n");
+void tree_lock::unlock() {
+    mutex.unlock();
+    if (owner && !is_in_loop_thread) {
+        owner->request_frame();
+    }
+}
+
+void render_target::request_frame() {
+    {
+        std::lock_guard lock(frame_mutex);
+        frame_requested = true;
+    }
+    frame_cv.notify_one();
+}
+
+void render_target::schedule_frame(float delay_ms) {
+    auto at = clock.now() + std::chrono::microseconds(
+                                static_cast<int64_t>(delay_ms * 1000));
+    {
+        std::lock_guard lock(frame_mutex);
+        if (!scheduled_frame || at < *scheduled_frame) {
+            scheduled_frame = at;
+        }
+    }
+    frame_cv.notify_one();
+}
+
+void render_target::wait_for_frame() {
+    std::unique_lock lock(frame_mutex);
+    auto now = clock.now();
+    auto deadline = now + std::chrono::milliseconds(1000);
+    if (idle_poll_ms > 0) {
+        deadline = std::min(deadline,
+                            now + std::chrono::milliseconds(idle_poll_ms));
+    }
+    if (scheduled_frame) {
+        deadline = std::min(deadline, *scheduled_frame);
+    }
+    frame_cv.wait_until(lock, deadline, [&] { return frame_requested; });
+    frame_requested = false;
+    if (scheduled_frame && *scheduled_frame <= clock.now()) {
+        scheduled_frame.reset();
+    }
+}
+
+void render_target::push_input(input_record record) {
+    {
+        std::lock_guard lock(input_lock);
+        pending_input.push_back(record);
+    }
+    request_frame();
+}
+
+bool render_target::key_down(int key) const {
+    return window && glfwGetKey(window, key) == GLFW_PRESS;
+}
+
+bool render_target::is_hovered(const widget *w) const {
+    return std::ranges::find(hover_chain, w) != hover_chain.end();
+}
+
+widget *render_target::hovered_widget() const {
+    return hover_chain.empty() ? nullptr : hover_chain.front();
+}
+
+void render_target::refresh_screen_info() {
+    auto monitor =
+        MonitorFromWindow(glfwGetWin32Window(window), MONITOR_DEFAULTTONEAREST);
+    dpi_scale = get_dpi_scale_from_monitor(monitor);
+    MONITORINFOEX monitor_info;
+    monitor_info.cbSize = sizeof(MONITORINFOEX);
+    GetMonitorInfo(monitor, &monitor_info);
+    screen = {
+        .width = monitor_info.rcMonitor.right - monitor_info.rcMonitor.left,
+        .height = monitor_info.rcMonitor.bottom - monitor_info.rcMonitor.top,
+        .dpi_scale = dpi_scale,
+    };
+}
+
+bool render_target::run_loop_tasks() {
+    bool ran = false;
+    while (true) {
+        std::unique_lock lock(loop_thread_tasks_lock);
+        if (loop_thread_tasks.empty()) {
+            break;
+        }
+        auto fn = std::move(loop_thread_tasks.front());
+        loop_thread_tasks.pop();
+        lock.unlock();
+        ran = true;
+        if (!fn) {
+            continue;
+        }
+        try {
+            fn();
+        } catch (const std::exception &e) {
+            std::print("Error: exception thrown in loop thread task: {}\n",
+                       e.what());
+        } catch (...) {
+            std::print("Error: unknown exception thrown in loop thread task\n");
+        }
+    }
+    return ran;
+}
+
+void render_target::update_hover(widget *target) {
+    std::vector<widget *> chain;
+    for (auto w = target; w; w = w->parent) {
+        chain.push_back(w);
+    }
+    if (chain == hover_chain) {
+        return;
+    }
+    for (auto &ref : hover_chain_refs) {
+        if (auto w = ref.lock(); w && std::ranges::find(chain, w.get()) ==
+                                          chain.end()) {
+            w->handle_mouse_leave();
+        }
+    }
+    auto previous = std::move(hover_chain);
+    hover_chain = std::move(chain);
+    hover_chain_refs.clear();
+    for (auto w : hover_chain) {
+        hover_chain_refs.push_back(w->weak_from_this());
+    }
+    for (auto it = hover_chain.rbegin(); it != hover_chain.rend(); ++it) {
+        if (std::ranges::find(previous, *it) == previous.end()) {
+            (*it)->handle_mouse_enter();
+        }
+    }
+    request_frame();
+}
+
+void render_target::dispatch_key(key_event &e) {
+    std::vector<widget *> visited;
+    if (focused_widget) {
+        if (auto f = focused_widget->lock()) {
+            for (auto w = f.get(); w && !e.handled; w = w->parent) {
+                w->handle_key(e);
+                visited.push_back(w);
+            }
+        }
+    }
+    std::function<void(widget *)> broadcast = [&](widget *w) {
+        for (auto list : {&w->floating, &w->children}) {
+            auto snapshot = *list;
+            for (auto &c : snapshot) {
+                if (e.handled)
+                    return;
+                if (c && !c->dying_time)
+                    broadcast(c.get());
+            }
+        }
+        if (!e.handled && std::ranges::find(visited, w) == visited.end()) {
+            w->handle_key(e);
+        }
+    };
+    if (!e.handled && root) {
+        broadcast(root.get());
+    }
+}
+
+void render_target::dispatch_focus_change() {
+    std::shared_ptr<widget> now =
+        focused_widget ? focused_widget->lock() : nullptr;
+    auto before = last_focused.lock();
+    if (now == before) {
+        return;
+    }
+    last_focused = now;
+    if (before) {
+        before->handle_focus_changed(false);
+    }
+    if (now) {
+        now->handle_focus_changed(true);
+    }
+    request_frame();
+}
+
+void render_target::dispatch_input() {
+    double cx = 0, cy = 0;
+    glfwGetCursorPos(window, &cx, &cy);
+    const float mx = static_cast<float>(cx / dpi_scale),
+                my = static_cast<float>(cy / dpi_scale);
+    const bool moved = mx != mouse_x || my != mouse_y;
+    mouse_x = mx;
+    mouse_y = my;
+
+    std::vector<input_record> records;
+    {
+        std::lock_guard lock(input_lock);
+        records.swap(pending_input);
+    }
+
+    update_hover(root->hit_test_tree(mx, my));
+    auto chain_refs = hover_chain_refs;
+
+    auto bubble = [&](auto &&fn) {
+        for (auto &ref : chain_refs) {
+            if (auto w = ref.lock()) {
+                if (fn(*w))
+                    return;
+            }
+        }
+    };
+    auto in_press_chain = [&](widget *w) {
+        return std::ranges::any_of(press_chain, [w](auto &ref) {
+            return ref.lock().get() == w;
+        });
+    };
+
+    if (moved) {
+        mouse_event e{.x = mx, .y = my};
+        bubble([&](widget &w) {
+            w.handle_mouse_move(e);
+            return false;
+        });
+        if (mouse_down || right_mouse_down) {
+            for (auto &ref : press_chain) {
+                if (auto w = ref.lock(); w && !is_hovered(w.get())) {
+                    w->handle_mouse_move(e);
                 }
             }
         }
     }
+
+    if (mouse_down && glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) !=
+                          GLFW_PRESS &&
+        std::ranges::none_of(records, [](auto &r) {
+            return r.type == input_record::kind::button;
+        })) {
+        records.push_back({.type = input_record::kind::button,
+                           .code = GLFW_MOUSE_BUTTON_LEFT,
+                           .action = GLFW_RELEASE});
+    }
+
+    std::u32string text;
+    auto flush_text = [&] {
+        if (text.empty())
+            return;
+        text_input_event e{.text = std::move(text)};
+        text.clear();
+        if (focused_widget) {
+            if (auto f = focused_widget->lock()) {
+                f->handle_text_input(e);
+            }
+        }
+    };
+
+    for (auto &r : records) {
+        if (r.type == input_record::kind::character) {
+            text.push_back(static_cast<char32_t>(r.code));
+            continue;
+        }
+        flush_text();
+        if (r.type == input_record::kind::button) {
+            if (r.code > GLFW_MOUSE_BUTTON_MIDDLE)
+                continue;
+            mouse_event e{.x = mx,
+                          .y = my,
+                          .button = static_cast<mouse_button>(r.code)};
+            if (r.action == GLFW_PRESS) {
+                if (r.code == GLFW_MOUSE_BUTTON_LEFT)
+                    mouse_down = true;
+                if (r.code == GLFW_MOUSE_BUTTON_RIGHT)
+                    right_mouse_down = true;
+                if (r.code == GLFW_MOUSE_BUTTON_LEFT && focused_widget) {
+                    auto f = focused_widget->lock();
+                    if (!f || !is_hovered(f.get()))
+                        focused_widget.reset();
+                }
+                press_chain = chain_refs;
+                bubble([&](widget &w) {
+                    w.handle_mouse_down(e);
+                    return e.handled;
+                });
+            } else if (r.action == GLFW_RELEASE) {
+                if (r.code == GLFW_MOUSE_BUTTON_LEFT)
+                    mouse_down = false;
+                if (r.code == GLFW_MOUSE_BUTTON_RIGHT)
+                    right_mouse_down = false;
+                for (auto &ref : press_chain) {
+                    if (auto w = ref.lock()) {
+                        w->handle_mouse_up(e);
+                        if (e.handled)
+                            break;
+                    }
+                }
+                mouse_event click = e;
+                click.handled = false;
+                bubble([&](widget &w) {
+                    if (in_press_chain(&w))
+                        w.handle_click(click);
+                    return click.handled;
+                });
+                if (!mouse_down && !right_mouse_down)
+                    press_chain.clear();
+            }
+        } else if (r.type == input_record::kind::scroll) {
+            scroll_event e{
+                .x = mx, .y = my, .delta = static_cast<float>(r.value)};
+            bubble([&](widget &w) {
+                w.handle_scroll(e);
+                return e.handled;
+            });
+        } else if (r.type == input_record::kind::key) {
+            if (r.action == GLFW_RELEASE)
+                continue;
+            key_event e{.key = r.code,
+                        .mods = r.mods,
+                        .repeat = r.action == GLFW_REPEAT};
+            dispatch_key(e);
+        }
+    }
+    flush_text();
+}
+
+void render_target::frame() {
+    frame_index++;
+    auto now = clock.now();
+    delta_time = std::min(
+        1000 * std::chrono::duration<float>(now - last_time).count(), 50.f);
+    last_time = now;
+    if (screen_dirty.exchange(false)) {
+        refresh_screen_info();
+    }
+
+    std::lock_guard lock(rt_lock.mutex);
+    render_target::current = this;
+    if (!root) {
+        return;
+    }
+    root->owner_rt = this;
+    root->parent = nullptr;
+
+    dispatch_input();
+    bool animating = false;
+    bool changed = root->tick_tree(delta_time, animating);
+    dispatch_focus_change();
+    if (should_loop_stop_hide_as_close || glfwWindowShouldClose(window)) {
+        return;
+    }
+
+    root->explicit_width = root->explicit_height = true;
+    YGNodeStyleSetWidth(root->node, static_cast<float>(width));
+    YGNodeStyleSetHeight(root->node, static_cast<float>(height));
+    {
+        nanovg_context vg{nvg, this};
+        auto t = vg.transaction();
+        vg.resetTransform();
+        vg.scale(dpi_scale, dpi_scale);
+        root->prepare_layout_tree(this);
+        root->layout_detached(static_cast<float>(width),
+                              static_cast<float>(height));
+    }
+
+    std::function<void(widget &)> settle = [&](widget &w) {
+        for (auto &anim : w.anim_floats) {
+            anim->update(0);
+            changed |= anim->updated();
+            animating |= anim->animating();
+        }
+        for (auto list : {&w.children, &w.floating})
+            for (auto &c : *list)
+                if (c)
+                    settle(*c);
+    };
+    settle(*root);
+
+    update_hover(root->hit_test_tree(mouse_x, mouse_y));
+    dispatch_focus_change();
+
+    const auto ms_now =
+        std::chrono::duration_cast<std::chrono::milliseconds>(
+            now.time_since_epoch())
+            .count();
+    const bool stale = ms_now - last_paint > 1000 &&
+                       glfwGetWindowAttrib(window, GLFW_VISIBLE);
+    const bool paint = changed || force_paint.exchange(false) || stale;
+    if (paint) {
+        int fb_width, fb_height;
+        glfwGetFramebufferSize(window, &fb_width, &fb_height);
+        glViewport(0, 0, fb_width, fb_height);
+        glClearColor(0, 0, 0, 0);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT |
+                GL_STENCIL_BUFFER_BIT);
+        nanovg_context vg{nvg, this};
+        vg.beginFrame(fb_width, fb_height, 1);
+        vg.scale(dpi_scale, dpi_scale);
+        begin_acrylic_frame();
+        root->render(vg);
+        commit_acrylic_frame();
+        vg.endFrame();
+        glFlush();
+        glfwSwapBuffers(window);
+        last_paint = ms_now;
+    } else {
+        commit_acrylic_frame();
+    }
+
+    if (animating || changed) {
+        if (paint && vsync)
+            request_frame();
+        else
+            schedule_frame(8);
+    }
+}
+
+void render_target::start_loop() {
+    is_in_loop_thread = true;
+    glfwMakeContextCurrent(window);
+    last_time = clock.now();
+    force_paint = true;
+    screen_dirty = true;
+    request_frame();
+    while (!glfwWindowShouldClose(window) && !should_loop_stop_hide_as_close) {
+        wait_for_frame();
+        if (glfwWindowShouldClose(window) || should_loop_stop_hide_as_close) {
+            break;
+        }
+        sync_acrylic_host();
+        frame();
+        if (run_loop_tasks()) {
+            request_frame();
+        }
+    }
     if (should_loop_stop_hide_as_close) {
         should_loop_stop_hide_as_close = false;
+        glfwMakeContextCurrent(window);
         glClearColor(0, 0, 0, 0);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT |
                 GL_STENCIL_BUFFER_BIT);
@@ -400,14 +751,25 @@ void render_target::start_loop() {
         resize(0, 0);
         hide();
         {
-            std::lock_guard lock(rt_lock);
+            std::lock_guard lock(rt_lock.mutex);
             root->children.clear();
+            root->floating.clear();
+            hover_chain.clear();
+            hover_chain_refs.clear();
+            press_chain.clear();
+            last_focused.reset();
+            mouse_down = right_mouse_down = false;
+        }
+        {
+            std::lock_guard lock(input_lock);
+            pending_input.clear();
         }
     }
     glfwMakeContextCurrent(nullptr);
 }
 std::expected<bool, std::string> render_target::init() {
     root = std::make_shared<widget>();
+    root->hit_self = false;
 
     std::ignore = init_global();
     std::promise<void> p;
@@ -516,6 +878,8 @@ std::expected<bool, std::string> render_target::init() {
             rt->width = width / rt->dpi_scale;
             rt->height = height / rt->dpi_scale;
             rt->reset_view();
+            rt->force_paint = true;
+            rt->request_frame();
         });
 
     glfwSetWindowFocusCallback(window, [](GLFWwindow *window, int focused) {
@@ -524,6 +888,7 @@ std::expected<bool, std::string> render_target::init() {
         if (thiz->on_focus_changed) {
             thiz->on_focus_changed.value()(focused);
         }
+        thiz->request_frame();
     });
 
     glfwSetWindowContentScaleCallback(
@@ -531,30 +896,60 @@ std::expected<bool, std::string> render_target::init() {
             auto rt =
                 static_cast<render_target *>(glfwGetWindowUserPointer(window));
             rt->dpi_scale = x;
+            rt->screen_dirty = true;
+            rt->force_paint = true;
+            rt->request_frame();
+        });
+
+    glfwSetWindowPosCallback(window, [](GLFWwindow *window, int, int) {
+        auto rt =
+            static_cast<render_target *>(glfwGetWindowUserPointer(window));
+        rt->screen_dirty = true;
+        rt->request_frame();
+    });
+
+    glfwSetWindowRefreshCallback(window, [](GLFWwindow *window) {
+        auto rt =
+            static_cast<render_target *>(glfwGetWindowUserPointer(window));
+        rt->force_paint = true;
+        rt->request_frame();
+    });
+
+    glfwSetCursorPosCallback(window, [](GLFWwindow *window, double, double) {
+        static_cast<render_target *>(glfwGetWindowUserPointer(window))
+            ->request_frame();
+    });
+
+    glfwSetCursorEnterCallback(window, [](GLFWwindow *window, int) {
+        static_cast<render_target *>(glfwGetWindowUserPointer(window))
+            ->request_frame();
+    });
+
+    glfwSetMouseButtonCallback(
+        window, [](GLFWwindow *window, int button, int action, int mods) {
+            static_cast<render_target *>(glfwGetWindowUserPointer(window))
+                ->push_input({.type = input_record::kind::button,
+                              .code = button,
+                              .action = action,
+                              .mods = mods});
         });
 
     glfwSetScrollCallback(
         window, [](GLFWwindow *window, double xoffset, double yoffset) {
-            auto rt =
-                static_cast<render_target *>(glfwGetWindowUserPointer(window));
-            rt->scroll_y += yoffset;
+            static_cast<render_target *>(glfwGetWindowUserPointer(window))
+                ->push_input({.type = input_record::kind::scroll,
+                              .value = yoffset});
         });
 
     glfwSetKeyCallback(window, [](GLFWwindow *window, int key, int scancode,
                                   int action, int mods) {
-        auto rt =
-            static_cast<render_target *>(glfwGetWindowUserPointer(window));
-        if (key >= 0 && key <= GLFW_KEY_LAST) {
-            auto lock = rt->key_states.get_back_lock();
-            auto &back = rt->key_states.get_back();
-            if (action == GLFW_PRESS) {
-                back[key] |= key_state::pressed;
-            } else if (action == GLFW_RELEASE) {
-                back[key] |= key_state::released;
-            } else if (action == GLFW_REPEAT) {
-                back[key] |= key_state::repeated;
-            }
-        }
+        if (key < 0 || key > GLFW_KEY_LAST)
+            return;
+        static_cast<render_target *>(glfwGetWindowUserPointer(window))
+            ->push_input({.type = input_record::kind::key,
+                          .code = key,
+                          .action = action,
+                          .mods = mods});
     });
 
     glfwSetCharCallback(window, [](GLFWwindow *window, unsigned int codepoint) {
@@ -563,12 +958,12 @@ std::expected<bool, std::string> render_target::init() {
         if (!rt || codepoint == 0) {
             return;
         }
-        auto lock = rt->char_input.get_back_lock();
-        rt->char_input.get_back().push_back(static_cast<char32_t>(codepoint));
+        rt->push_input({.type = input_record::kind::character,
+                        .code = static_cast<int>(codepoint)});
     });
 
-    dpi_scale = get_dpi_scale_from_monitor(
-        get_closest_monitor(glfwGetWin32Window(window)));
+    refresh_screen_info();
+    screen_dirty = false;
 
     reset_view();
 
@@ -648,118 +1043,6 @@ std::expected<bool, std::string> render_target::init_global() {
 
     return future.get();
 }
-void render_target::render() {
-    int fb_width, fb_height;
-    glfwGetFramebufferSize(window, &fb_width, &fb_height);
-    glViewport(0, 0, fb_width, fb_height);
-
-    auto now = clock.now();
-    auto delta_time =
-        1000 * std::chrono::duration<float>(now - last_time).count();
-    last_time = now;
-    if constexpr (true) {
-        static float counter = 0, time_ctr = 0;
-        counter++;
-        time_ctr += delta_time;
-        if (time_ctr > 1000) {
-            time_ctr = 0;
-            std::printf("FPS: %f\n", counter);
-            counter = 0;
-        }
-    }
-
-    auto begin = clock.now();
-    auto ms_steady =
-        duration_cast<std::chrono::milliseconds>(now.time_since_epoch())
-            .count();
-    auto time_checkpoints = [&](const char *name) {
-        if constexpr (false) {
-            auto end = clock.now();
-            auto delta = std::chrono::duration<float>(end - begin).count();
-            std::printf("%s: %fms\n", name, delta);
-            begin = end;
-        }
-    };
-
-    nanovg_context vg{nvg, this};
-    time_checkpoints("NanoVG context");
-
-    vg.beginFrame(fb_width, fb_height, 1);
-    vg.scale(dpi_scale, dpi_scale);
-
-    double mouse_x, mouse_y;
-    glfwGetCursorPos(window, &mouse_x, &mouse_y);
-    int window_x, window_y;
-    glfwGetWindowPos(window, &window_x, &window_y);
-    auto monitor = get_closest_monitor(glfwGetWin32Window(window));
-    dpi_scale = get_dpi_scale_from_monitor(monitor);
-    MONITORINFOEX monitor_info;
-    monitor_info.cbSize = sizeof(MONITORINFOEX);
-    GetMonitorInfo(monitor, &monitor_info);
-    bool need_repaint = false;
-    update_context ctx{
-        .delta_time = delta_time,
-        .mouse_x = mouse_x / dpi_scale,
-        .mouse_y = mouse_y / dpi_scale,
-        .mouse_down =
-            glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS,
-        .right_mouse_down =
-            glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS,
-        .window = window,
-        .screen =
-            {
-                .width =
-                    monitor_info.rcMonitor.right - monitor_info.rcMonitor.left,
-                .height =
-                    monitor_info.rcMonitor.bottom - monitor_info.rcMonitor.top,
-                .dpi_scale = dpi_scale,
-            },
-        .scroll_y = scroll_y,
-        .need_repaint = need_repaint,
-        .rt = *this,
-        .vg = vg,
-    };
-    scroll_y = 0;
-    ctx.mouse_clicked = ctx.mouse_down && !mouse_down;
-    ctx.right_mouse_clicked = ctx.right_mouse_down && !right_mouse_down;
-    ctx.mouse_up = !ctx.mouse_down && mouse_down;
-    mouse_down = ctx.mouse_down;
-    right_mouse_down = ctx.right_mouse_down;
-    set_ime_caret_rect(0, 0, 0, false);
-    {
-        time_checkpoints("Update context");
-        {
-            std::lock_guard lock(rt_lock);
-            root->owner_rt = this;
-            render_target::current = this;
-            root->update(ctx);
-            key_states.flip();
-            char_input.flip();
-        }
-        time_checkpoints("Update root");
-        if (need_repaint || (ms_steady - last_repaint) > 1000) {
-            glClearColor(0, 0, 0, 0);
-            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT |
-                    GL_STENCIL_BUFFER_BIT);
-            last_repaint = ms_steady;
-            {
-                std::lock_guard lock(rt_lock);
-                begin_acrylic_frame();
-                root->render(vg);
-                commit_acrylic_frame();
-            }
-            vg.endFrame();
-            glFlush();
-            glfwSwapBuffers(window);
-
-        } else {
-            commit_acrylic_frame();
-            if (vsync)
-                Sleep(5);
-        }
-        time_checkpoints("Render root");
-    }
-}
 void render_target::reset_view() {
     if (!nvg)
         nvg = nvgCreateGL3(NVG_STENCIL_STROKES | NVG_ANTIALIAS);
@@ -785,6 +1068,7 @@ void render_target::close() {
     }
     ShowWindow(glfwGetWin32Window(window), SW_HIDE);
     glfwSetWindowShouldClose(window, true);
+    request_frame();
 }
 
 std::queue<std::function<void()>> render_target::main_thread_tasks = {};
@@ -831,6 +1115,7 @@ void render_target::hide_as_close() {
         acrylic_host_window->clear();
         acrylic_host_window->hide();
     }
+    request_frame();
 }
 void render_target::post_loop_thread_task(std::function<void()> task,
                                           bool delay) {
@@ -840,6 +1125,7 @@ void render_target::post_loop_thread_task(std::function<void()> task,
     }
     std::lock_guard lock(loop_thread_tasks_lock);
     loop_thread_tasks.push(std::move(task));
+    request_frame();
 }
 void render_target::focus() {
     if (this->window) {
@@ -854,6 +1140,9 @@ void render_target::set_ime_caret_rect(float x, float y, float height,
                                        bool active, float document_x,
                                        float document_y, float document_width,
                                        float document_height) {
+    if (!active && !ime_caret_active) {
+        return;
+    }
     ime_caret_active = active;
     if (!active) {
         ime_caret_x = 0;
@@ -866,6 +1155,10 @@ void render_target::set_ime_caret_rect(float x, float y, float height,
         return;
     }
 
+    const int previous[] = {ime_caret_x,      ime_caret_y,
+                            ime_caret_height, ime_document_x,
+                            ime_document_y,   ime_document_width,
+                            ime_document_height};
     ime_caret_x = static_cast<int>(std::lround(x * dpi_scale));
     ime_caret_y = static_cast<int>(std::lround(y * dpi_scale));
     ime_caret_height =
@@ -878,6 +1171,13 @@ void render_target::set_ime_caret_rect(float x, float y, float height,
         std::max(std::lround(document_height * dpi_scale), 1L));
 
     if (!window) {
+        return;
+    }
+    const int current[] = {ime_caret_x,      ime_caret_y,
+                           ime_caret_height, ime_document_x,
+                           ime_document_y,   ime_document_width,
+                           ime_document_height};
+    if (std::ranges::equal(previous, current)) {
         return;
     }
 

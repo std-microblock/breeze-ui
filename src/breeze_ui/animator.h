@@ -52,18 +52,21 @@ struct animated_float {
     float prog() const;
     float dest() const;
     bool updated() const;
+    bool animating() const;
 
     easing_type easing = easing_type::mutation;
     float progress = 0.f;
     std::string name = "anim_float";
 
 private:
+    void step(float delta_time);
     float duration = 200.f;
     float value = 0.f;
     float from = 0.f;
     float destination = value;
     float delay = 0.f, delay_timer = 0.f;
     bool _updated = true;
+    bool _touched = true;
 };
 
 using sp_anim_float = std::shared_ptr<animated_float>;

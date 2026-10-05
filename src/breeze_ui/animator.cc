@@ -4,8 +4,17 @@
 #include <cstdio>
 #include <numbers>
 #include <print>
+#include <utility>
 
 void ui::animated_float::update(float delta_time) {
+    const bool touched = std::exchange(_touched, false);
+    step(delta_time);
+    _updated = _updated || touched;
+}
+bool ui::animated_float::animating() const {
+    return easing != easing_type::mutation && progress < 1.f;
+}
+void ui::animated_float::step(float delta_time) {
     if (easing == easing_type::mutation) {
         if (destination != value || progress != 1.f) {
             value = destination;
@@ -68,6 +77,7 @@ void ui::animated_float::animate_to(float dest) {
     this->destination = dest;
     progress = 0.f;
     delay_timer = 0.f;
+    _touched = true;
 
     if (before_animate) {
         before_animate.value()(dest);
@@ -82,7 +92,7 @@ float ui::animated_float::prog() const { return progress; }
 float ui::animated_float::dest() const { return destination; }
 void ui::animated_float::reset_to(float dest) {
     if (value != dest)
-        _updated = true;
+        _touched = true;
     value = dest;
     this->from = dest;
     this->destination = dest;

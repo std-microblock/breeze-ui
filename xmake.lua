@@ -29,12 +29,21 @@ target("breeze-nanosvg")
     })
     add_headerfiles("src/nanosvg/*.h")
 
+target("breeze-yoga")
+    set_kind("static")
+    add_files("src/yoga/**.cpp")
+    add_includedirs("src", {
+        public = true
+    })
+    add_headerfiles("src/(yoga/**.h)")
+    set_warnings("none")
+
 target("breeze_ui")
     set_kind("static")
     add_packages("glfw", "glad", "simdutf", {
         public = true
     })
-    add_deps("breeze-nanovg", "breeze-nanosvg", {
+    add_deps("breeze-nanovg", "breeze-nanosvg", "breeze-yoga", {
         public = true
     })
     add_syslinks("dwmapi", "advapi32", "imm32", "shcore", "windowsapp", "CoreMessaging")

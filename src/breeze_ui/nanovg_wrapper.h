@@ -55,7 +55,7 @@ inline auto translate( float x, float y) { return nvgTranslate(ctx,x,y); }
 inline auto rotate( float angle) { return nvgRotate(ctx,angle); }
 inline auto skewX( float angle) { return nvgSkewX(ctx,angle); }
 inline auto skewY( float angle) { return nvgSkewY(ctx,angle); }
-inline auto scale( float x, float y) { return nvgScale(ctx,x + offset_x,y + offset_y); }
+inline auto scale( float x, float y) { return nvgScale(ctx,x,y); }
 inline auto currentTransform( float* xform) { return nvgCurrentTransform(ctx,xform); }
 inline auto createImage( const char* filename, int imageFlags) { return nvgCreateImage(ctx,filename,imageFlags); }
 inline auto createImageMem( int imageFlags, unsigned char* data, int ndata) { return nvgCreateImageMem(ctx,imageFlags,data,ndata); }
