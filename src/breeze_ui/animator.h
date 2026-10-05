@@ -5,6 +5,7 @@
 #include <functional>
 #include <optional>
 #include <print>
+#include <vector>
 
 namespace ui {
 struct widget;
@@ -39,7 +40,13 @@ struct animated_float {
 
     operator float() const { return var(); }
     float operator*() const { return var(); }
-    void update(float delta_time);
+    void update(float delta_time) {
+        if (!_touched && progress >= 1.f && value == destination) {
+            _updated = false;
+            return;
+        }
+        update_slow(delta_time);
+    }
 
     void animate_to(float destination);
     void reset_to(float destination);
@@ -47,18 +54,25 @@ struct animated_float {
     void set_easing(easing_type easing);
     void set_delay(float delay);
     // current value
-    float var() const;
+    float var() const { return value; }
     // progress, if have any
-    float prog() const;
-    float dest() const;
-    bool updated() const;
-    bool animating() const;
+    float prog() const { return progress; }
+    float dest() const { return destination; }
+    bool updated() const { return _updated; }
+    bool animating() const {
+        return easing != easing_type::mutation && progress < 1.f;
+    }
 
     easing_type easing = easing_type::mutation;
     float progress = 0.f;
     std::string name = "anim_float";
+    bool affects_layout = true;
+
+    static inline thread_local std::vector<animated_float *> *touch_log =
+        nullptr;
 
 private:
+    void update_slow(float delta_time);
     void step(float delta_time);
     float duration = 200.f;
     float value = 0.f;

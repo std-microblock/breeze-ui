@@ -6,6 +6,7 @@
 #include <DispatcherQueue.h>
 #include <windows.ui.composition.interop.h>
 
+#include <optional>
 #include <vector>
 #include <winrt/Windows.Foundation.Numerics.h>
 #include <winrt/Windows.System.h>
@@ -43,10 +44,23 @@ private:
         winrt::Windows::UI::Composition::ContainerVisual container{nullptr};
         winrt::Windows::UI::Composition::SpriteVisual backdrop{nullptr};
         winrt::Windows::UI::Composition::SpriteVisual tint{nullptr};
+        winrt::Windows::UI::Composition::CompositionColorBrush tint_brush{
+            nullptr};
         winrt::Windows::UI::Composition::CompositionRoundedRectangleGeometry
             geometry{nullptr};
         winrt::Windows::UI::Composition::CompositionGeometricClip clip{
             nullptr};
+        std::optional<acrylic_region> applied;
+        float applied_scale = 0;
+    };
+
+    struct window_state {
+        HWND parent = nullptr;
+        RECT rect{};
+        int width = 0;
+        int height = 0;
+        bool shown = false;
+        ULONGLONG at = 0;
     };
 
     void ensure_initialized(HWND parent_hwnd);
@@ -71,6 +85,9 @@ private:
     winrt::Windows::UI::Composition::ContainerVisual root_{nullptr};
 
     std::vector<region_visual> region_visuals_{};
+    size_t attached_regions_ = 0;
+    winrt::Windows::Foundation::Numerics::float2 root_size_{-1, -1};
+    std::optional<window_state> window_state_;
     bool visible_ = false;
 };
 

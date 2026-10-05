@@ -52,6 +52,16 @@ Color to_color(const NVGcolor &color) {
     };
 }
 
+bool same_color(const NVGcolor &a, const NVGcolor &b) {
+    return a.r == b.r && a.g == b.g && a.b == b.b && a.a == b.a;
+}
+
+bool same_region(const acrylic_region &a, const acrylic_region &b) {
+    return a.x == b.x && a.y == b.y && a.width == b.width &&
+           a.height == b.height && a.radius == b.radius &&
+           a.opacity == b.opacity && same_color(a.tint, b.tint);
+}
+
 LRESULT CALLBACK AcrylicHostWndProc(HWND hwnd, UINT msg, WPARAM wParam,
                                     LPARAM lParam) {
     switch (msg) {
@@ -98,16 +108,22 @@ void acrylic_host::update(HWND parent_hwnd, int logical_width,
     }
 
     ensure_region_count(regions.size());
-    root_.Size(
-        float2{logical_width * dpi_scale, logical_height * dpi_scale});
-    root_.Children().RemoveAll();
+    const float2 size{logical_width * dpi_scale, logical_height * dpi_scale};
+    if (size != root_size_) {
+        root_.Size(size);
+        root_size_ = size;
+    }
 
     for (size_t i = 0; i < regions.size(); ++i) {
         update_region_visual(region_visuals_[i], regions[i], dpi_scale);
     }
 
-    for (size_t i = regions.size(); i-- > 0;) {
-        root_.Children().InsertAtTop(region_visuals_[i].container);
+    if (attached_regions_ != regions.size()) {
+        root_.Children().RemoveAll();
+        for (size_t i = regions.size(); i-- > 0;) {
+            root_.Children().InsertAtTop(region_visuals_[i].container);
+        }
+        attached_regions_ = regions.size();
     }
 
     sync_window(parent_hwnd, logical_width, logical_height, dpi_scale,
@@ -127,15 +143,18 @@ void acrylic_host::sync(HWND parent_hwnd, int logical_width, int logical_height,
 
 void acrylic_host::clear() {
     visible_ = false;
+    window_state_.reset();
     if (root_) {
         root_.Children().RemoveAll();
     }
     region_visuals_.clear();
+    attached_regions_ = 0;
     pump_messages();
 }
 
 void acrylic_host::hide() {
     visible_ = false;
+    window_state_.reset();
     if (hwnd_) {
         ShowWindow(hwnd_, SW_HIDE);
     }
@@ -144,6 +163,8 @@ void acrylic_host::hide() {
 void acrylic_host::shutdown() {
     hide();
     region_visuals_.clear();
+    attached_regions_ = 0;
+    root_size_ = {-1, -1};
     root_ = nullptr;
     target_ = nullptr;
     compositor_ = nullptr;
@@ -248,6 +269,8 @@ void acrylic_host::ensure_region_count(size_t count) {
 
         visual.container.Clip(visual.clip);
         visual.backdrop.Brush(compositor_.CreateHostBackdropBrush());
+        visual.tint_brush = compositor_.CreateColorBrush();
+        visual.tint.Brush(visual.tint_brush);
         visual.container.Children().InsertAtTop(visual.tint);
         visual.container.Children().InsertAtBottom(visual.backdrop);
         region_visuals_.push_back(std::move(visual));
@@ -261,6 +284,13 @@ void acrylic_host::ensure_region_count(size_t count) {
 void acrylic_host::update_region_visual(region_visual &visual,
                                         const acrylic_region &region,
                                         float dpi_scale) {
+    if (visual.applied && visual.applied_scale == dpi_scale &&
+        same_region(*visual.applied, region)) {
+        return;
+    }
+    visual.applied = region;
+    visual.applied_scale = dpi_scale;
+
     const float width = std::max(region.width * dpi_scale, 0.0f);
     const float height = std::max(region.height * dpi_scale, 0.0f);
     const float radius = std::clamp(region.radius * dpi_scale, 0.0f,
@@ -277,7 +307,7 @@ void acrylic_host::update_region_visual(region_visual &visual,
 
     visual.backdrop.Size({width, height});
     visual.tint.Size({width, height});
-    visual.tint.Brush(compositor_.CreateColorBrush(to_color(region.tint)));
+    visual.tint_brush.Color(to_color(region.tint));
 }
 
 void acrylic_host::sync_window(HWND parent_hwnd, int logical_width,
@@ -292,11 +322,22 @@ void acrylic_host::sync_window(HWND parent_hwnd, int logical_width,
     const int height =
         std::max(static_cast<int>(logical_height * dpi_scale), 1);
 
+    const bool shown =
+        visible && IsWindowVisible(parent_hwnd) && !IsIconic(parent_hwnd);
+    const ULONGLONG now = GetTickCount64();
+    if (window_state_ && window_state_->parent == parent_hwnd &&
+        EqualRect(&window_state_->rect, &rect) &&
+        window_state_->width == width && window_state_->height == height &&
+        window_state_->shown == shown && now - window_state_->at < 250) {
+        return;
+    }
+    window_state_ = window_state{parent_hwnd, rect, width, height, shown, now};
+
     const auto flags =
         SWP_NOACTIVATE | SWP_NOOWNERZORDER | SWP_NOSENDCHANGING | SWP_SHOWWINDOW;
     SetWindowPos(hwnd_, parent_hwnd, rect.left, rect.top, width, height, flags);
 
-    if (visible && IsWindowVisible(parent_hwnd) && !IsIconic(parent_hwnd)) {
+    if (shown) {
         ShowWindow(hwnd_, SW_SHOWNOACTIVATE);
         visible_ = true;
     } else {

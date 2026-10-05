@@ -66,6 +66,7 @@ void set_ime_composition_state(render_target *rt, ime_composition_state state) {
         rt->ime_composition = std::move(state);
     }
     rt->ime_composition_dirty = true;
+    rt->layout_dirty = true;
     rt->request_frame();
 }
 
@@ -318,13 +319,49 @@ float get_dpi_scale_from_monitor(HMONITOR monitor) {
     return static_cast<float>(dpi_x) / 96.0f;
 }
 
+static std::int64_t steady_now_ns() {
+    return std::chrono::duration_cast<std::chrono::nanoseconds>(
+               std::chrono::steady_clock::now().time_since_epoch())
+        .count();
+}
+
+void tree_lock::lock() {
+    if (is_in_loop_thread) {
+        mutex.lock();
+        return;
+    }
+    external_waiters.fetch_add(1);
+    mutex.lock();
+    external_waiters.fetch_sub(1);
+}
+
 void tree_lock::unlock() {
+    const bool external = !is_in_loop_thread;
+    if (external) {
+        last_external_unlock = steady_now_ns();
+        if (owner)
+            owner->layout_dirty = true;
+    }
     mutex.unlock();
-    if (owner && !is_in_loop_thread) {
+    if (owner && external) {
         owner->request_frame();
     }
 }
 
+void render_target::yield_to_tree_writers() {
+    constexpr std::int64_t budget_ns = 8'000'000;
+    constexpr std::int64_t writer_idle_ns = 1'000'000;
+    const auto start = steady_now_ns();
+    while (true) {
+        const auto now = steady_now_ns();
+        if (now - start >= budget_ns)
+            return;
+        if (rt_lock.external_waiters.load() == 0 &&
+            now - rt_lock.last_external_unlock.load() >= writer_idle_ns)
+            return;
+        std::this_thread::yield();
+    }
+}
 void render_target::request_frame() {
     {
         std::lock_guard lock(frame_mutex);
@@ -431,6 +468,7 @@ void render_target::update_hover(widget *target) {
     if (chain == hover_chain) {
         return;
     }
+    layout_dirty = true;
     for (auto &ref : hover_chain_refs) {
         if (auto w = ref.lock(); w && std::ranges::find(chain, w.get()) ==
                                           chain.end()) {
@@ -488,6 +526,7 @@ void render_target::dispatch_focus_change() {
         return;
     }
     last_focused = now;
+    layout_dirty = true;
     if (before) {
         before->handle_focus_changed(false);
     }
@@ -512,6 +551,8 @@ void render_target::dispatch_input() {
         records.swap(pending_input);
     }
 
+    if (!records.empty() || (moved && (mouse_down || right_mouse_down)))
+        layout_dirty = true;
     update_hover(root->hit_test_tree(mx, my));
     auto chain_refs = hover_chain_refs;
 
@@ -643,9 +684,11 @@ void render_target::frame() {
     last_time = now;
     if (screen_dirty.exchange(false)) {
         refresh_screen_info();
+        layout_dirty = true;
     }
 
-    std::lock_guard lock(rt_lock.mutex);
+    yield_to_tree_writers();
+    std::unique_lock lock(rt_lock.mutex);
     render_target::current = this;
     if (!root) {
         return;
@@ -655,6 +698,15 @@ void render_target::frame() {
 
     dispatch_input();
     bool animating = false;
+    touched_anims.clear();
+    animated_float::touch_log = &touched_anims;
+    widget::retired = &retired_widgets;
+    struct frame_logs_guard {
+        ~frame_logs_guard() {
+            animated_float::touch_log = nullptr;
+            widget::retired = nullptr;
+        }
+    } logs_guard;
     bool changed = root->tick_tree(delta_time, animating);
     changed |= ime_composition_dirty.exchange(false);
     dispatch_focus_change();
@@ -662,10 +714,15 @@ void render_target::frame() {
         return;
     }
 
-    root->explicit_width = root->explicit_height = true;
-    YGNodeStyleSetWidth(root->node, static_cast<float>(width));
-    YGNodeStyleSetHeight(root->node, static_cast<float>(height));
-    {
+    if (!touched_anims.empty() || width != laid_out_width ||
+        height != laid_out_height)
+        layout_dirty = true;
+    if (idle_poll_ms > 0 || layout_dirty.exchange(false)) {
+        laid_out_width = width;
+        laid_out_height = height;
+        root->explicit_width = root->explicit_height = true;
+        YGNodeStyleSetWidth(root->node, static_cast<float>(width));
+        YGNodeStyleSetHeight(root->node, static_cast<float>(height));
         nanovg_context vg{nvg, this};
         auto t = vg.transaction();
         vg.resetTransform();
@@ -675,18 +732,15 @@ void render_target::frame() {
                               static_cast<float>(height));
     }
 
-    std::function<void(widget &)> settle = [&](widget &w) {
-        for (auto &anim : w.anim_floats) {
-            anim->update(0);
-            changed |= anim->updated();
-            animating |= anim->animating();
-        }
-        for (auto list : {&w.children, &w.floating})
-            for (auto &c : *list)
-                if (c)
-                    settle(*c);
-    };
-    settle(*root);
+    animated_float::touch_log = nullptr;
+    for (auto anim : touched_anims) {
+        anim->update(0);
+        changed |= anim->updated();
+        animating |= anim->animating();
+    }
+    touched_anims.clear();
+    widget::retired = nullptr;
+    retired_widgets.clear();
 
     update_hover(root->hit_test_tree(mouse_x, mouse_y));
     dispatch_focus_change();
@@ -713,6 +767,7 @@ void render_target::frame() {
         root->render(vg);
         commit_acrylic_frame();
         vg.endFrame();
+        lock.unlock();
         glFlush();
         glfwSwapBuffers(window);
         last_paint = ms_now;
@@ -743,6 +798,7 @@ void render_target::start_loop() {
         sync_acrylic_host();
         frame();
         if (run_loop_tasks()) {
+            layout_dirty = true;
             request_frame();
         }
     }
@@ -774,8 +830,13 @@ void render_target::start_loop() {
     glfwMakeContextCurrent(nullptr);
 }
 std::expected<bool, std::string> render_target::init() {
-    root = std::make_shared<widget>();
-    root->hit_self = false;
+    {
+        std::lock_guard lock(rt_lock.mutex);
+        if (!root) {
+            root = std::make_shared<widget>();
+            root->hit_self = false;
+        }
+    }
 
     std::ignore = init_global();
     std::promise<void> p;
@@ -1211,6 +1272,7 @@ void render_target::clear_ime_composition() {
         ime_composition = {};
     }
     ime_composition_dirty = true;
+    layout_dirty = true;
     request_frame();
 }
 void *render_target::hwnd() const {

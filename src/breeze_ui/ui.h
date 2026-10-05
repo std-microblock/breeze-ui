@@ -33,7 +33,9 @@ bool system_uses_light_theme();
 struct tree_lock {
     render_target *owner = nullptr;
     std::recursive_mutex mutex;
-    void lock() { mutex.lock(); }
+    std::atomic_int external_waiters = 0;
+    std::atomic<std::int64_t> last_external_unlock = 0;
+    void lock();
     bool try_lock() { return mutex.try_lock(); }
     void unlock();
 };
@@ -77,6 +79,7 @@ struct render_target {
     float delta_time = 0;
     std::uint64_t frame_index = 0;
     int idle_poll_ms = 0;
+    std::atomic_bool layout_dirty = true;
     bool key_down(int key) const;
     bool is_hovered(const widget *w) const;
     widget *hovered_widget() const;
@@ -159,8 +162,12 @@ struct render_target {
     std::vector<std::weak_ptr<widget>> hover_chain_refs;
     std::vector<std::weak_ptr<widget>> press_chain;
     std::weak_ptr<widget> last_focused;
+    std::vector<animated_float *> touched_anims;
+    int laid_out_width = -1, laid_out_height = -1;
+    std::vector<std::shared_ptr<widget>> retired_widgets;
 
     void wait_for_frame();
+    void yield_to_tree_writers();
     bool run_loop_tasks();
     void frame();
     void dispatch_input();

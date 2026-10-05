@@ -3,6 +3,8 @@
 #include "nanosvg.h"
 #include "nanosvgrast.h"
 #include "nanovg.h"
+#include <algorithm>
+#include <cmath>
 #include <functional>
 #include <utility>
 
@@ -28,6 +30,8 @@ console.log([...nanovgSource.replace(/,\n/gm, ',').replaceAll('\t', '').matchAll
    */
 
   float offset_x = 0, offset_y = 0;
+  float clip_left = -INFINITY, clip_top = -INFINITY;
+  float clip_right = INFINITY, clip_bottom = INFINITY;
 
 
 inline auto beginFrame( float windowWidth, float windowHeight, float devicePixelRatio) { return nvgBeginFrame(ctx,windowWidth,windowHeight,devicePixelRatio); }
@@ -204,6 +208,21 @@ inline auto fonsResetAtlas() { return nvgFonsResetAtlas(ctx); }
         copy.offset_x = x + offset_x;
         copy.offset_y = y + offset_y;
         return copy;
+    }
+
+    inline void clip_to(float x, float y, float w, float h) {
+        clip_left = (std::max)(clip_left, x + offset_x);
+        clip_top = (std::max)(clip_top, y + offset_y);
+        clip_right = (std::min)(clip_right, x + offset_x + w);
+        clip_bottom = (std::min)(clip_bottom, y + offset_y + h);
+    }
+
+    inline bool outside_clip(float x, float y, float w, float h,
+                             float margin) const {
+        x += offset_x;
+        y += offset_y;
+        return x - margin > clip_right || y - margin > clip_bottom ||
+               x + w + margin < clip_left || y + h + margin < clip_top;
     }
 
     inline nanovg_context with_reset_offset(float x = 0, float y = 0) {

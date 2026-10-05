@@ -6,13 +6,10 @@
 #include <print>
 #include <utility>
 
-void ui::animated_float::update(float delta_time) {
+void ui::animated_float::update_slow(float delta_time) {
     const bool touched = std::exchange(_touched, false);
     step(delta_time);
     _updated = _updated || touched;
-}
-bool ui::animated_float::animating() const {
-    return easing != easing_type::mutation && progress < 1.f;
 }
 void ui::animated_float::step(float delta_time) {
     if (easing == easing_type::mutation) {
@@ -86,11 +83,14 @@ void ui::animated_float::animate_to(float dest) {
     if (this->easing == easing_type::mutation) {
         value = dest;
     }
+    if (touch_log)
+        touch_log->push_back(this);
 }
-float ui::animated_float::var() const { return value; }
-float ui::animated_float::prog() const { return progress; }
-float ui::animated_float::dest() const { return destination; }
 void ui::animated_float::reset_to(float dest) {
+    if (value == dest && destination == dest && progress >= 1.f) {
+        delay_timer = 0.f;
+        return;
+    }
     if (value != dest)
         _touched = true;
     value = dest;
@@ -98,6 +98,8 @@ void ui::animated_float::reset_to(float dest) {
     this->destination = dest;
     progress = 0.999999999f; // to avoid lerp issues
     delay_timer = 0.f;
+    if (touch_log)
+        touch_log->push_back(this);
 }
 void ui::animated_float::set_easing(easing_type easing) {
     this->easing = easing;
@@ -105,7 +107,6 @@ void ui::animated_float::set_easing(easing_type easing) {
 void ui::animated_float::set_duration(float duration) {
     this->duration = duration;
 }
-bool ui::animated_float::updated() const { return _updated; }
 void ui::animated_float::set_delay(float delay) {
     this->delay = delay;
     delay_timer = 0.f;
@@ -118,4 +119,7 @@ ui::animated_color::animated_color(ui::widget *thiz, float r, float g, float b,
     : r(thiz->anim_float(r, name_prefix + ".r")),
       g(thiz->anim_float(g, name_prefix + ".g")),
       b(thiz->anim_float(b, name_prefix + ".b")),
-      a(thiz->anim_float(a, name_prefix + ".a")) {}
+      a(thiz->anim_float(a, name_prefix + ".a")) {
+    for (auto &channel : {this->r, this->g, this->b, this->a})
+        channel->affects_layout = false;
+}

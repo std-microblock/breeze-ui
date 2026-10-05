@@ -85,9 +85,7 @@ void ui::widget::invalidate_measure() {
     if (measure_attached && YGNodeHasMeasureFunc(node)) {
         YGNodeMarkDirty(node);
     }
-    if (owner_rt) {
-        owner_rt->request_frame();
-    }
+    mark_layout_dirty();
 }
 
 void ui::widget::apply_user_size(bool w, bool h) {
@@ -123,7 +121,31 @@ bool ui::widget::attached_to_parent() const {
            !manual_position;
 }
 
+bool ui::widget::yoga_children_match() const {
+    const size_t count = YGNodeGetChildCount(node);
+    if (!lays_out_children())
+        return count == 0;
+    const bool reversed = reversed_flow();
+    size_t index = 0;
+    for (auto &c : children) {
+        if (c->manual_position)
+            continue;
+        if (index >= count)
+            return false;
+        const size_t slot = reversed ? count - 1 - index : index;
+        if (YGNodeGetChild(node, slot) != c->node)
+            return false;
+        ++index;
+    }
+    return index == count;
+}
+
 void ui::widget::sync_yoga_children() {
+    const bool same = yoga_children_match();
+    if (same && measure_attached ==
+                    (has_measure() && YGNodeGetChildCount(node) == 0))
+        return;
+
     std::vector<widget *> desired;
     if (lays_out_children()) {
         desired.reserve(children.size());
@@ -140,10 +162,6 @@ void ui::widget::sync_yoga_children() {
         measure_attached = false;
     }
 
-    bool same = YGNodeGetChildCount(node) == desired.size();
-    for (size_t i = 0; same && i < desired.size(); ++i) {
-        same = YGNodeGetChild(node, i) == desired[i]->node;
-    }
     if (!same) {
         YGNodeRemoveAllChildren(node);
         for (size_t i = 0; i < desired.size(); ++i) {
@@ -183,17 +201,19 @@ void ui::widget::prepare_layout_tree(render_target *rt) {
 }
 
 bool ui::widget::axis_free(bool horizontal_axis) const {
-    auto fp = dynamic_cast<const flex_widget *>(parent);
-    if (!fp)
-        return false;
-    if (horizontal_axis == fp->horizontal)
-        return fp->justify_content == flex_widget::justify::free;
-    return fp->align_items == flex_widget::align::free;
+    return parent && parent->child_axis_free(horizontal_axis);
+}
+
+bool ui::flex_widget::child_axis_free(bool horizontal_axis) const {
+    if (horizontal_axis == horizontal)
+        return justify_content == justify::free;
+    return align_items == align::free;
 }
 
 void ui::widget::apply_layout_tree() {
     const bool attached = attached_to_parent();
     if (attached) {
+        detached_layout_valid = false;
         if (!axis_free(true))
             x->animate_to(YGNodeLayoutGetLeft(node));
         if (!axis_free(false))
@@ -209,8 +229,8 @@ void ui::widget::apply_layout_tree() {
     YGNodeSetHasNewLayout(node, false);
     after_layout();
     for (auto list : {&children, &floating}) {
-        auto snapshot = *list;
-        for (auto &c : snapshot) {
+        for (size_t i = 0; i < list->size(); ++i) {
+            auto c = (*list)[i].get();
             if (!c)
                 continue;
             if (c->attached_to_parent())
@@ -223,8 +243,18 @@ void ui::widget::apply_layout_tree() {
 
 void ui::widget::layout_detached(float available_width,
                                  float available_height) {
-    YGNodeCalculateLayout(node, available_width, available_height,
-                          YGDirectionLTR);
+    auto same = [](float a, float b) {
+        return a == b || (std::isnan(a) && std::isnan(b));
+    };
+    if (!detached_layout_valid || YGNodeIsDirty(node) ||
+        !same(available_width, detached_available_width) ||
+        !same(available_height, detached_available_height)) {
+        YGNodeCalculateLayout(node, available_width, available_height,
+                              YGDirectionLTR);
+        detached_layout_valid = true;
+        detached_available_width = available_width;
+        detached_available_height = available_height;
+    }
     apply_layout_tree();
 }
 
@@ -235,15 +265,21 @@ void ui::widget::compute_layout_now(render_target *rt) {
 
 bool ui::widget::tick_tree(float delta_time, bool &animating) {
     bool changed = false;
+    bool layout_changed = false;
     for (auto &anim : anim_floats) {
         anim->update(delta_time);
-        changed |= anim->updated();
+        if (anim->updated()) {
+            changed = true;
+            layout_changed |= anim->affects_layout;
+        }
         animating |= anim->animating();
     }
     if (needs_repaint) {
-        changed = true;
+        changed = layout_changed = true;
         needs_repaint = false;
     }
+    if (layout_changed && owner_rt)
+        owner_rt->layout_dirty = true;
     dying_time.update(delta_time);
     if (dying_time) {
         animating = true;
@@ -251,21 +287,30 @@ bool ui::widget::tick_tree(float delta_time, bool &animating) {
     tick(delta_time);
 
     auto step = [&](std::vector<std::shared_ptr<widget>> &list) {
-        auto snapshot = list;
-        bool removed = false;
-        for (auto &c : snapshot) {
-            if (!c)
+        for (size_t i = 0; i < list.size();) {
+            auto c = list[i].get();
+            if (!c) {
+                ++i;
                 continue;
+            }
             if (c->dying_time && c->dying_time.time <= 0) {
-                std::erase(list, c);
-                removed = true;
+                if (retired)
+                    retired->push_back(list[i]);
+                list.erase(list.begin() + i);
+                changed = true;
                 continue;
             }
             c->parent = this;
             c->owner_rt = owner_rt;
             changed |= c->tick_tree(delta_time, animating);
+            if (i < list.size() && list[i].get() == c) {
+                ++i;
+            } else if (auto it = std::ranges::find_if(
+                           list, [c](auto &w) { return w.get() == c; });
+                       it != list.end()) {
+                i = static_cast<size_t>(it - list.begin()) + 1;
+            }
         }
-        changed |= removed;
     };
     step(children);
     step(floating);
@@ -282,12 +327,25 @@ ui::widget *ui::widget::hit_test_tree(float px, float py) {
             if (auto hit = (*it)->hit_test_tree(lx, ly))
                 return hit;
     }
-    if (!clips_children() || inside) {
-        const float cx = lx - child_offset_x(), cy = ly - child_offset_y();
+    const bool clips = clips_children();
+    if (!clips || inside) {
+        const float ox = child_offset_x(), oy = child_offset_y();
+        const float cx = lx - ox, cy = ly - oy;
+        const float view_l = -ox, view_t = -oy;
+        const float view_r = width->var() - ox, view_b = height->var() - oy;
         for (auto it = children.rbegin(); it != children.rend(); ++it) {
-            if (*it)
-                if (auto hit = (*it)->hit_test_tree(cx, cy))
-                    return hit;
+            auto c = it->get();
+            if (!c)
+                continue;
+            if (clips && c->floating.empty()) {
+                const float l = c->x->var(), t = c->y->var();
+                const float r = l + c->width->var(), b = t + c->height->var();
+                if (r > l && b > t &&
+                    (l > view_r || t > view_b || r < view_l || b < view_t))
+                    continue;
+            }
+            if (auto hit = c->hit_test_tree(cx, cy))
+                return hit;
         }
     }
     return inside && hit_self ? this : nullptr;
@@ -301,10 +359,13 @@ bool ui::widget::hit_test(float px, float py) const {
 void ui::widget::render(nanovg_context ctx) {
     {
         auto t = ctx.transaction();
-        if (clips_children())
+        auto inner = ctx;
+        if (clips_children()) {
             ctx.intersectScissor(*x, *y, *width, *height);
+            inner.clip_to(*x, *y, *width, *height);
+        }
         render_children(
-            ctx.with_offset(*x + child_offset_x(), *y + child_offset_y()),
+            inner.with_offset(*x + child_offset_x(), *y + child_offset_y()),
             children);
     }
     render_children(ctx.with_offset(*x, *y), floating);
@@ -312,8 +373,14 @@ void ui::widget::render(nanovg_context ctx) {
 
 void ui::widget::render_children(nanovg_context ctx,
                                  std::vector<std::shared_ptr<widget>> &list) {
+    constexpr float cull_margin = 4;
     for (auto &child : list) {
         if (!child || !child->visible)
+            continue;
+        const float cw = child->width->var(), ch = child->height->var();
+        if (cw > 0 && ch > 0 && child->floating.empty() &&
+            ctx.outside_clip(child->x->var(), child->y->var(), cw, ch,
+                             cull_margin))
             continue;
         ctx.save();
         child->render(ctx);
@@ -341,6 +408,8 @@ void ui::widget::insert_child(size_t index, std::shared_ptr<widget> child) {
 void ui::widget::remove_child(std::shared_ptr<widget> child) {
     if (child->parent == this)
         child->parent = nullptr;
+    if (retired)
+        retired->push_back(child);
     std::erase(children, child);
     children_dirty = true;
     request_repaint();
@@ -357,19 +426,22 @@ void ui::widget::add_floating(std::shared_ptr<widget> child) {
 void ui::widget::remove_floating(std::shared_ptr<widget> child) {
     if (child->parent == this)
         child->parent = nullptr;
+    if (retired)
+        retired->push_back(child);
     std::erase(floating, child);
     request_repaint();
 }
 
 void ui::widget::request_repaint() {
     needs_repaint = true;
-    if (owner_rt)
-        owner_rt->request_frame();
+    mark_layout_dirty();
 }
 
 void ui::widget::mark_layout_dirty() {
-    if (owner_rt)
+    if (owner_rt) {
+        owner_rt->layout_dirty = true;
         owner_rt->request_frame();
+    }
 }
 
 #define BREEZE_STYLE_SETTER(name, flag, call)                                  \
@@ -473,6 +545,7 @@ void ui::widget::set_focus(bool focused) {
                owner_rt->focused_widget->lock().get() == this) {
         owner_rt->focused_widget.reset();
     }
+    owner_rt->layout_dirty = true;
     owner_rt->request_frame();
 }
 
@@ -573,9 +646,13 @@ int ui::text_widget::face(nanovg_context &ctx) const {
 void ui::text_widget::before_layout() {
     widget::before_layout();
     apply_user_size(!shrink_horizontal, !shrink_vertical);
-    measure_key key{text, font_size, font_weight, font_family, max_width};
-    if (last_key != key) {
-        last_key = std::move(key);
+    if (!last_key || last_key->text != text ||
+        last_key->font_size != font_size ||
+        last_key->font_weight != font_weight ||
+        last_key->font_family != font_family ||
+        last_key->max_width != max_width) {
+        last_key = measure_key{text, font_size, font_weight, font_family,
+                               max_width};
         invalidate_measure();
     }
 }
@@ -629,12 +706,49 @@ void ui::text_widget::render(nanovg_context ctx) {
     ctx.textAlign(NVG_ALIGN_TOP | NVG_ALIGN_LEFT);
     ctx.fontFaceId(face(ctx));
 
-    if (natural_width > width->var() + 0.5f && width->var() > 0) {
-        ctx.textBox(*x, *y, width->var(), text.c_str(), nullptr);
+    const float w = width->var();
+    if (natural_width > w + 0.5f && w > 0) {
+        render_wrapped(ctx, w);
     } else {
         ctx.text(*x, *y, text.c_str(), nullptr);
     }
     widget::render(ctx);
+}
+
+void ui::text_widget::render_wrapped(nanovg_context &ctx, float w) {
+    const float scale = ctx.rt ? ctx.rt->dpi_scale : 1.f;
+    if (!wrap_key || wrap_key->width != w || wrap_key->scale != scale ||
+        wrap_key->measure.text != text ||
+        wrap_key->measure.font_size != font_size ||
+        wrap_key->measure.font_weight != font_weight ||
+        wrap_key->measure.font_family != font_family) {
+        wrap_key = wrap_cache_key{
+            {text, font_size, font_weight, font_family, max_width}, w, scale};
+        wrap_rows.clear();
+        const char *begin = text.c_str();
+        const char *cursor = begin;
+        const char *end = begin + text.size();
+        NVGtextRow rows[16];
+        while (cursor < end) {
+            const int n = ctx.textBreakLines(cursor, end, w, rows, 16);
+            if (n <= 0)
+                break;
+            for (int i = 0; i < n; ++i)
+                wrap_rows.emplace_back(rows[i].start - begin,
+                                       rows[i].end - begin);
+            cursor = rows[n - 1].next;
+        }
+    }
+
+    float line_height = 0;
+    ctx.textMetrics(nullptr, nullptr, &line_height);
+    const char *base = text.c_str();
+    float row_y = *y;
+    for (auto [start, end] : wrap_rows) {
+        if (!ctx.outside_clip(*x, row_y, w, line_height, line_height))
+            ctx.text(*x, row_y, base + start, base + end);
+        row_y += line_height;
+    }
 }
 
 ui::button_widget::button_widget(const std::string &button_text)

@@ -234,6 +234,13 @@ struct FONSglyph
 };
 typedef struct FONSglyph FONSglyph;
 
+#define FONS_KERN_CACHE_SIZE 4096
+struct FONSkern
+{
+	unsigned long long key;
+	int value;
+};
+
 struct FONSfont
 {
 	FONSttFontImpl font;
@@ -252,6 +259,7 @@ struct FONSfont
 	int lut[FONS_HASH_LUT_SIZE];
 	int fallbacks[FONS_MAX_FALLBACKS];
 	int nfallbacks;
+	struct FONSkern* kernCache;
 };
 typedef struct FONSfont FONSfont;
 
@@ -915,6 +923,7 @@ static void fons__freeFont(FONSfont* font)
 {
 	if (font == NULL) return;
 	if (font->glyphs) free(font->glyphs);
+	if (font->kernCache) free(font->kernCache);
 	if (font->freeData && font->data) free(font->data);
 	free(font);
 }
@@ -1274,6 +1283,25 @@ static FONSglyph* fons__getGlyph(FONScontext* stash, FONSfont* font, unsigned in
 	return glyph;
 }
 
+static int fons__getKern(FONSfont* font, int glyph1, int glyph2)
+{
+	unsigned long long key = (((unsigned long long)(unsigned int)glyph1 << 32) | (unsigned int)glyph2) + 1;
+	unsigned int slot;
+	struct FONSkern* entry;
+	if (font->kernCache == NULL) {
+		font->kernCache = (struct FONSkern*)calloc(FONS_KERN_CACHE_SIZE, sizeof(struct FONSkern));
+		if (font->kernCache == NULL)
+			return fons__tt_getGlyphKernAdvance(&font->font, glyph1, glyph2);
+	}
+	slot = (unsigned int)((key * 0x9E3779B97F4A7C15ull) >> 52) & (FONS_KERN_CACHE_SIZE - 1);
+	entry = &font->kernCache[slot];
+	if (entry->key != key) {
+		entry->key = key;
+		entry->value = fons__tt_getGlyphKernAdvance(&font->font, glyph1, glyph2);
+	}
+	return entry->value;
+}
+
 static void fons__getQuad(FONScontext* stash, int prevGlyphIndex, int prevGlyphFont,
 						   FONSglyph* glyph, float spacing, float* x, float* y, FONSquad* q,
 						   float* penx)
@@ -1285,7 +1313,7 @@ static void fons__getQuad(FONScontext* stash, int prevGlyphIndex, int prevGlyphF
 		if (prevGlyphFont == glyph->font) {
 			FONSfont* kernFont = stash->fonts[glyph->font];
 			float kernScale = fons__tt_getPixelHeightScale(&kernFont->font, glyph->size/10.0f);
-			adv = fons__tt_getGlyphKernAdvance(&kernFont->font, prevGlyphIndex, glyph->index) * kernScale;
+			adv = fons__getKern(kernFont, prevGlyphIndex, glyph->index) * kernScale;
 		}
 		*x += (int)(adv + spacing + 0.5f);
 	}

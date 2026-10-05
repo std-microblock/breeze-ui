@@ -111,6 +111,11 @@ struct widget : std::enable_shared_from_this<widget> {
         return anim;
     }
 
+    static sp_anim_float paint_only(sp_anim_float anim) {
+        anim->affects_layout = false;
+        return anim;
+    }
+
     sp_anim_float x = anim_float("x"), y = anim_float("y"),
                   width = anim_float("width"), height = anim_float("height");
 
@@ -134,6 +139,8 @@ struct widget : std::enable_shared_from_this<widget> {
     std::vector<std::shared_ptr<widget>> children;
     std::vector<std::shared_ptr<widget>> floating;
     bool children_dirty = false;
+    static inline thread_local std::vector<std::shared_ptr<widget>> *retired =
+        nullptr;
 
     bool focused();
     bool focus_within();
@@ -167,6 +174,7 @@ struct widget : std::enable_shared_from_this<widget> {
     virtual bool lays_out_children() const { return false; }
     virtual bool clips_children() const { return enable_child_clipping; }
     virtual bool reversed_flow() const { return false; }
+    virtual bool child_axis_free(bool horizontal_axis) const { return false; }
 
     virtual void tick(float delta_time) {}
     virtual void before_layout();
@@ -260,6 +268,9 @@ struct widget : std::enable_shared_from_this<widget> {
     bool is_floating = false;
     bool measure_attached = false;
     float applied_width = NAN, applied_height = NAN;
+    bool detached_layout_valid = false;
+    float detached_available_width = NAN, detached_available_height = NAN;
+    bool yoga_children_match() const;
     void sync_yoga_children();
     bool axis_free(bool horizontal_axis) const;
 };
@@ -288,7 +299,7 @@ struct flex_widget : public widget {
     float max_height = INFINITY;
     bool enable_scrolling = false;
     sp_anim_float scroll_top =
-        anim_float(0, 150, easing_type::ease_in_out);
+        paint_only(anim_float(0, 150, easing_type::ease_in_out));
     NVGcolor scroll_bar_color = nvgRGBA(200, 200, 200, 128);
     float scroll_bar_width = 6;
     float scroll_bar_margin = 2;
@@ -311,6 +322,7 @@ struct flex_widget : public widget {
     }
     float child_offset_y() const override { return scroll_top->var(); }
     bool reversed_flow() const override;
+    bool child_axis_free(bool horizontal_axis) const override;
     void before_layout() override;
     void after_layout() override;
     void handle_scroll(scroll_event &e) override;
@@ -346,11 +358,18 @@ struct text_widget : public widget {
         int font_weight;
         std::string font_family;
         float max_width;
-        bool operator==(const measure_key &) const = default;
+    };
+    struct wrap_cache_key {
+        measure_key measure;
+        float width;
+        float scale;
     };
     std::optional<measure_key> last_key;
+    std::optional<wrap_cache_key> wrap_key;
+    std::vector<std::pair<size_t, size_t>> wrap_rows;
     float natural_width = 0;
     int face(nanovg_context &ctx) const;
+    void render_wrapped(nanovg_context &ctx, float w);
 };
 
 struct textbox_widget : public widget {
