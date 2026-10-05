@@ -358,44 +358,37 @@ struct textbox_widget : public widget {
     std::string placeholder;
     float font_size = 14;
     int font_weight = 400;
-    float padding_x = 8;
+    float padding_x = 10;
     float padding_y = 6;
-    float border_radius = 6;
+    float border_radius = 4;
     float min_height = 32;
     float preferred_multiline_height = 96;
     float line_height_multiplier = 1;
     bool multiline = false;
     bool readonly = false;
     bool disabled = false;
-    animated_color background_color = {this, 1.f, 1.f, 1.f, 235.f / 255.f,
+    animated_color background_color = {this, 1.f, 1.f, 1.f, 0.7f,
                                        "textbox.bg"};
-    animated_color readonly_background_color = {
-        this, 250.f / 255.f, 250.f / 255.f, 250.f / 255.f, 235.f / 255.f,
-        "textbox.readonly_bg"};
+    animated_color readonly_background_color = {this, 1.f, 1.f, 1.f, 0.3f,
+                                                "textbox.readonly_bg"};
     animated_color disabled_background_color = {
-        this, 235.f / 255.f, 235.f / 255.f, 235.f / 255.f, 220.f / 255.f,
+        this, 249.f / 255.f, 249.f / 255.f, 249.f / 255.f, 0.3f,
         "textbox.disabled_bg"};
-    animated_color border_color = {this, 180.f / 255.f, 180.f / 255.f,
-                                   180.f / 255.f, 1.f, "textbox.border"};
-    animated_color focus_border_color = {this, 59.f / 255.f, 130.f / 255.f,
-                                         246.f / 255.f, 1.f,
+    animated_color border_color = {this, 0.f, 0.f, 0.f, 0.06f,
+                                   "textbox.border"};
+    animated_color focus_border_color = {this, 0.f, 95.f / 255.f,
+                                         184.f / 255.f, 1.f,
                                          "textbox.focus_border"};
-    animated_color text_color = {this, 32.f / 255.f, 32.f / 255.f,
-                                 32.f / 255.f, 1.f, "textbox.text"};
-    animated_color disabled_text_color = {
-        this, 140.f / 255.f, 140.f / 255.f, 140.f / 255.f, 1.f,
-        "textbox.disabled_text"};
-    animated_color placeholder_color = {
-        this, 150.f / 255.f, 150.f / 255.f, 150.f / 255.f, 1.f,
-        "textbox.placeholder"};
-    animated_color selection_color = {this, 59.f / 255.f, 130.f / 255.f,
-                                      246.f / 255.f, 100.f / 255.f,
-                                      "textbox.selection"};
-    animated_color caret_color = {this, 20.f / 255.f, 20.f / 255.f,
-                                  20.f / 255.f, 1.f, "textbox.caret"};
+    animated_color text_color = {this, 0.f, 0.f, 0.f, 0.9f, "textbox.text"};
+    animated_color disabled_text_color = {this, 0.f, 0.f, 0.f, 0.36f,
+                                          "textbox.disabled_text"};
+    animated_color placeholder_color = {this, 0.f, 0.f, 0.f, 0.6f,
+                                        "textbox.placeholder"};
+    animated_color selection_color = {this, 0.f, 95.f / 255.f, 184.f / 255.f,
+                                      0.4f, "textbox.selection"};
+    animated_color caret_color = {this, 0.f, 0.f, 0.f, 0.9f, "textbox.caret"};
     animated_color composition_underline_color = {
-        this, 59.f / 255.f, 130.f / 255.f, 246.f / 255.f, 1.f,
-        "textbox.composition"};
+        this, 0.f, 95.f / 255.f, 184.f / 255.f, 1.f, "textbox.composition"};
 
     std::function<void(std::string)> on_change;
     std::function<void()> on_focus;
@@ -413,6 +406,8 @@ struct textbox_widget : public widget {
     YGSize measure(float width, YGMeasureMode width_mode, float height,
                    YGMeasureMode height_mode) override;
 
+    void handle_mouse_enter() override;
+    void handle_mouse_leave() override;
     void handle_mouse_down(mouse_event &e) override;
     void handle_mouse_move(mouse_event &e) override;
     void handle_mouse_up(mouse_event &e) override;
@@ -454,6 +449,8 @@ struct textbox_widget : public widget {
     float horizontal_scroll = 0;
     float vertical_scroll = 0;
     float caret_blink_elapsed = 0;
+    float hover_fill_alpha = 0.9f;
+    float focus_fill_alpha = 1.f;
     bool dragging_selection = false;
     std::optional<float> preferred_caret_x;
     std::uint64_t next_pending_key_batch_id = 1;

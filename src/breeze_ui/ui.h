@@ -28,6 +28,8 @@ struct ime_composition_state {
 
 struct render_target;
 
+bool system_uses_light_theme();
+
 struct tree_lock {
     render_target *owner = nullptr;
     std::recursive_mutex mutex;

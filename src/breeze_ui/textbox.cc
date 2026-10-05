@@ -2,6 +2,7 @@
 #include "breeze_ui/ui.h"
 #include "breeze_ui/widget.h"
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <limits>
 #include <string_view>
@@ -388,6 +389,62 @@ std::string selected_text(const ui::textbox_widget &widget) {
     const auto end = std::max(widget.selection_start(), widget.selection_end());
     return utf8_substr_chars(widget.text, map, start, end);
 }
+
+struct textbox_palette {
+    std::array<float, 4> background;
+    std::array<float, 4> readonly_background;
+    std::array<float, 4> disabled_background;
+    std::array<float, 4> stroke;
+    std::array<float, 4> accent;
+    std::array<float, 4> text;
+    std::array<float, 4> disabled_text;
+    std::array<float, 4> placeholder;
+    std::array<float, 4> selection;
+    std::array<float, 4> caret;
+    float hover_fill_alpha = 1.f;
+    float focus_fill_alpha = 1.f;
+};
+
+textbox_palette fluent_textbox_palette(bool light) {
+    if (light) {
+        return {
+            .background = {1.f, 1.f, 1.f, 0.7f},
+            .readonly_background = {1.f, 1.f, 1.f, 0.3f},
+            .disabled_background = {0.976f, 0.976f, 0.976f, 0.3f},
+            .stroke = {0.f, 0.f, 0.f, 0.06f},
+            .accent = {0.f, 95.f / 255.f, 184.f / 255.f, 1.f},
+            .text = {0.f, 0.f, 0.f, 0.9f},
+            .disabled_text = {0.f, 0.f, 0.f, 0.36f},
+            .placeholder = {0.f, 0.f, 0.f, 0.6f},
+            .selection = {0.f, 95.f / 255.f, 184.f / 255.f, 0.4f},
+            .caret = {0.f, 0.f, 0.f, 0.9f},
+            .hover_fill_alpha = 0.9f,
+            .focus_fill_alpha = 1.f,
+        };
+    }
+    return {
+        .background = {1.f, 1.f, 1.f, 0.06f},
+        .readonly_background = {1.f, 1.f, 1.f, 0.03f},
+        .disabled_background = {1.f, 1.f, 1.f, 0.04f},
+        .stroke = {1.f, 1.f, 1.f, 0.07f},
+        .accent = {96.f / 255.f, 205.f / 255.f, 1.f, 1.f},
+        .text = {1.f, 1.f, 1.f, 1.f},
+        .disabled_text = {1.f, 1.f, 1.f, 0.36f},
+        .placeholder = {197.f / 255.f, 197.f / 255.f, 197.f / 255.f, 1.f},
+        .selection = {96.f / 255.f, 205.f / 255.f, 1.f, 0.4f},
+        .caret = {1.f, 1.f, 1.f, 1.f},
+        .hover_fill_alpha = 0.09f,
+        .focus_fill_alpha = 0.12f,
+    };
+}
+
+float vertical_content_offset(bool multiline, float inner_height,
+                              float content_height) {
+    if (multiline) {
+        return 0.f;
+    }
+    return std::max((inner_height - content_height) * 0.5f, 0.f);
+}
 } // namespace
 
 void ui::textbox_widget::render(nanovg_context ctx) {
@@ -409,31 +466,44 @@ void ui::textbox_widget::render(nanovg_context ctx) {
                                              font_weight, multiline,
                                              inner_width, line_height_multiplier);
 
-    const auto fill_color = disabled   ? disabled_background_color.nvg()
-                            : readonly ? readonly_background_color.nvg()
-                                       : background_color.nvg();
-    const auto border_paint =
-        is_focused ? focus_border_color.nvg() : border_color.nvg();
+    auto fill_color = disabled   ? disabled_background_color.nvg()
+                      : readonly ? readonly_background_color.nvg()
+                                 : background_color.nvg();
+    const float fill_alpha =
+        is_focused ? focus_fill_alpha : (hovered() ? hover_fill_alpha : 0.f);
+    if (!disabled && !readonly && fill_alpha > fill_color.a) {
+        fill_color.a = fill_alpha;
+    }
     const auto foreground_color =
         disabled ? disabled_text_color.nvg() : text_color.nvg();
-    const float border_width = is_focused ? 2.0f : 1.0f;
-    const float border_inset = border_width * 0.5f;
+    const float content_offset_y = vertical_content_offset(
+        multiline, inner_height, layout.content_height);
 
     ctx.fillColor(fill_color);
     ctx.fillRoundedRect(*x, *y, *width, *height, border_radius);
-    ctx.strokeWidth(border_width);
-    ctx.strokeColor(border_paint);
-    ctx.strokeRoundedRect(*x + border_inset, *y + border_inset,
-                          std::max(*width - border_width, 0.0f),
-                          std::max(*height - border_width, 0.0f),
-                          std::max(border_radius - border_inset, 0.0f));
+    ctx.strokeWidth(1.0f);
+    ctx.strokeColor(border_color.nvg());
+    ctx.strokeRoundedRect(*x + 0.5f, *y + 0.5f,
+                          std::max(*width - 1.0f, 0.0f),
+                          std::max(*height - 1.0f, 0.0f),
+                          std::max(border_radius - 0.5f, 0.0f));
+    if (is_focused) {
+        const float inset = std::min(border_radius, *width * 0.5f);
+        ctx.beginPath();
+        ctx.strokeWidth(2.0f);
+        ctx.strokeColor(focus_border_color.nvg());
+        ctx.moveTo(*x + inset, *y + *height - 1.0f);
+        ctx.lineTo(*x + *width - inset, *y + *height - 1.0f);
+        ctx.stroke();
+    }
 
     auto t = ctx.transaction();
-    ctx.intersectScissor(*x + border_width, *y + border_width,
-                         std::max(*width - border_width * 2.0f, 0.0f),
-                         std::max(*height - border_width * 2.0f, 0.0f));
+    ctx.intersectScissor(*x + 1.0f, *y + 1.0f,
+                         std::max(*width - 2.0f, 0.0f),
+                         std::max(*height - 2.0f, 0.0f));
     ctx.translate(*x + padding_x - horizontal_scroll + ctx.offset_x,
-                  *y + padding_y - vertical_scroll + ctx.offset_y);
+                  *y + padding_y + content_offset_y - vertical_scroll +
+                      ctx.offset_y);
     ctx = ctx.with_reset_offset();
     ctx.fontSize(font_size);
     apply_font_face(ctx, "main", font_weight);
@@ -467,11 +537,11 @@ void ui::textbox_widget::render(nanovg_context ctx) {
             const float left = caret_x_for_index(row, composition_start);
             const float right = caret_x_for_index(row, composition_end);
             ctx.beginPath();
-            ctx.strokeWidth(1.0f);
+            ctx.strokeWidth(2.0f);
             ctx.strokeColor(composition_underline_color.nvg());
-            ctx.moveTo(left, row.y + layout.line_height - 1.5f);
+            ctx.moveTo(left, row.y + layout.line_height - 1.0f);
             ctx.lineTo(std::max(right, left + 1.0f),
-                       row.y + layout.line_height - 1.5f);
+                       row.y + layout.line_height - 1.0f);
             ctx.stroke();
         }
     }
@@ -490,15 +560,30 @@ void ui::textbox_widget::render(nanovg_context ctx) {
         const auto &row = layout.rows[static_cast<size_t>(row_index)];
         const float caret_x = caret_x_for_index(row, visual.caret_index);
         ctx.beginPath();
-        ctx.strokeWidth(1.5f);
+        ctx.strokeWidth(1.0f);
         ctx.strokeColor(caret_color.nvg());
-        ctx.moveTo(caret_x, row.y + 2.0f);
-        ctx.lineTo(caret_x, row.y + layout.line_height - 2.0f);
+        ctx.moveTo(caret_x, row.y + 1.0f);
+        ctx.lineTo(caret_x, row.y + layout.line_height - 1.0f);
         ctx.stroke();
     }
 }
 
-ui::textbox_widget::textbox_widget() : widget() {}
+ui::textbox_widget::textbox_widget() : widget() {
+    const auto palette = fluent_textbox_palette(ui::system_uses_light_theme());
+    background_color.reset_to(palette.background);
+    readonly_background_color.reset_to(palette.readonly_background);
+    disabled_background_color.reset_to(palette.disabled_background);
+    border_color.reset_to(palette.stroke);
+    focus_border_color.reset_to(palette.accent);
+    text_color.reset_to(palette.text);
+    disabled_text_color.reset_to(palette.disabled_text);
+    placeholder_color.reset_to(palette.placeholder);
+    selection_color.reset_to(palette.selection);
+    caret_color.reset_to(palette.caret);
+    composition_underline_color.reset_to(palette.accent);
+    hover_fill_alpha = palette.hover_fill_alpha;
+    focus_fill_alpha = palette.focus_fill_alpha;
+}
 
 ui::textbox_widget::~textbox_widget() = default;
 
@@ -552,13 +637,26 @@ int ui::textbox_widget::caret_from_point(float px, float py) {
     if (!vg.ctx)
         return caret_index;
     const float inner_width = std::max(width->dest() - padding_x * 2.0f, 1.0f);
+    const float inner_height =
+        std::max(height->dest() - padding_y * 2.0f, 1.0f);
     auto layout = build_textbox_layout(vg, text, font_size, font_weight,
                                        multiline, inner_width,
                                        line_height_multiplier);
+    const float content_offset_y =
+        vertical_content_offset(multiline, inner_height, layout.content_height);
     const float local_x = px - (abs_x() + padding_x) + horizontal_scroll;
-    const float local_y = py - (abs_y() + padding_y) + vertical_scroll;
+    const float local_y = py - (abs_y() + padding_y + content_offset_y) +
+                          vertical_scroll;
     return caret_index_from_point(layout, std::max(local_x, 0.0f),
                                   std::max(local_y, 0.0f));
+}
+
+void ui::textbox_widget::handle_mouse_enter() {
+    request_repaint();
+}
+
+void ui::textbox_widget::handle_mouse_leave() {
+    request_repaint();
 }
 
 void ui::textbox_widget::handle_mouse_down(mouse_event &e) {
@@ -946,7 +1044,10 @@ void ui::textbox_widget::update_scroll_and_ime() {
         horizontal_scroll = std::clamp(horizontal_scroll, 0.0f, max_scroll);
     }
 
-    const float left = abs_x() + padding_x, top = abs_y() + padding_y;
+    const float content_offset_y =
+        vertical_content_offset(multiline, inner_height, layout.content_height);
+    const float left = abs_x() + padding_x,
+                top = abs_y() + padding_y + content_offset_y;
     owner_rt->set_ime_caret_rect(left + caret_x - horizontal_scroll,
                                  top + row.y - vertical_scroll,
                                  layout.line_height, true, left, top,
