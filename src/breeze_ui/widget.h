@@ -451,6 +451,9 @@ struct textbox_widget : public widget {
     float caret_blink_elapsed = 0;
     float hover_fill_alpha = 0.9f;
     float focus_fill_alpha = 1.f;
+    float stroke_emphasize = 1.f;
+    sp_anim_float focus_underline =
+        anim_float(0.f, 140.f, easing_type::ease_out);
     bool dragging_selection = false;
     std::optional<float> preferred_caret_x;
     std::uint64_t next_pending_key_batch_id = 1;

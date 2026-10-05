@@ -403,6 +403,7 @@ struct textbox_palette {
     std::array<float, 4> caret;
     float hover_fill_alpha = 1.f;
     float focus_fill_alpha = 1.f;
+    float stroke_boost = 1.5f;
 };
 
 textbox_palette fluent_textbox_palette(bool light) {
@@ -411,30 +412,32 @@ textbox_palette fluent_textbox_palette(bool light) {
             .background = {1.f, 1.f, 1.f, 0.7f},
             .readonly_background = {1.f, 1.f, 1.f, 0.3f},
             .disabled_background = {0.976f, 0.976f, 0.976f, 0.3f},
-            .stroke = {0.f, 0.f, 0.f, 0.06f},
+            .stroke = {0.f, 0.f, 0.f, 0.07f},
             .accent = {0.f, 95.f / 255.f, 184.f / 255.f, 1.f},
             .text = {0.f, 0.f, 0.f, 0.9f},
             .disabled_text = {0.f, 0.f, 0.f, 0.36f},
             .placeholder = {0.f, 0.f, 0.f, 0.6f},
             .selection = {0.f, 95.f / 255.f, 184.f / 255.f, 0.4f},
             .caret = {0.f, 0.f, 0.f, 0.9f},
-            .hover_fill_alpha = 0.9f,
+            .hover_fill_alpha = 0.92f,
             .focus_fill_alpha = 1.f,
+            .stroke_boost = 1.4f,
         };
     }
     return {
-        .background = {1.f, 1.f, 1.f, 0.06f},
-        .readonly_background = {1.f, 1.f, 1.f, 0.03f},
-        .disabled_background = {1.f, 1.f, 1.f, 0.04f},
-        .stroke = {1.f, 1.f, 1.f, 0.07f},
+        .background = {1.f, 1.f, 1.f, 0.08f},
+        .readonly_background = {1.f, 1.f, 1.f, 0.04f},
+        .disabled_background = {1.f, 1.f, 1.f, 0.05f},
+        .stroke = {1.f, 1.f, 1.f, 0.08f},
         .accent = {96.f / 255.f, 205.f / 255.f, 1.f, 1.f},
         .text = {1.f, 1.f, 1.f, 1.f},
         .disabled_text = {1.f, 1.f, 1.f, 0.36f},
         .placeholder = {197.f / 255.f, 197.f / 255.f, 197.f / 255.f, 1.f},
         .selection = {96.f / 255.f, 205.f / 255.f, 1.f, 0.4f},
         .caret = {1.f, 1.f, 1.f, 1.f},
-        .hover_fill_alpha = 0.09f,
-        .focus_fill_alpha = 0.12f,
+        .hover_fill_alpha = 0.12f,
+        .focus_fill_alpha = 0.16f,
+        .stroke_boost = 1.5f,
     };
 }
 
@@ -466,13 +469,19 @@ void ui::textbox_widget::render(nanovg_context ctx) {
                                              font_weight, multiline,
                                              inner_width, line_height_multiplier);
 
+    const bool interactive = !disabled && !readonly;
     auto fill_color = disabled   ? disabled_background_color.nvg()
                       : readonly ? readonly_background_color.nvg()
                                  : background_color.nvg();
     const float fill_alpha =
         is_focused ? focus_fill_alpha : (hovered() ? hover_fill_alpha : 0.f);
-    if (!disabled && !readonly && fill_alpha > fill_color.a) {
+    if (interactive && fill_alpha > fill_color.a) {
         fill_color.a = fill_alpha;
+    }
+    auto stroke_color = border_color.nvg();
+    const bool emphasized = interactive && (is_focused || hovered());
+    if (emphasized) {
+        stroke_color.a = std::min(1.f, stroke_color.a * stroke_emphasize);
     }
     const auto foreground_color =
         disabled ? disabled_text_color.nvg() : text_color.nvg();
@@ -482,18 +491,35 @@ void ui::textbox_widget::render(nanovg_context ctx) {
     ctx.fillColor(fill_color);
     ctx.fillRoundedRect(*x, *y, *width, *height, border_radius);
     ctx.strokeWidth(1.0f);
-    ctx.strokeColor(border_color.nvg());
+    ctx.strokeColor(stroke_color);
     ctx.strokeRoundedRect(*x + 0.5f, *y + 0.5f,
                           std::max(*width - 1.0f, 0.0f),
                           std::max(*height - 1.0f, 0.0f),
                           std::max(border_radius - 0.5f, 0.0f));
+
+    const float underline_inset = std::min(border_radius, *width * 0.5f);
+    const float underline_y = *y + *height - 1.0f;
     if (is_focused) {
-        const float inset = std::min(border_radius, *width * 0.5f);
+        const float reveal = std::clamp(focus_underline->var(), 0.f, 1.f);
+        const float half = (*width * 0.5f - underline_inset) * reveal;
+        const float centre = *x + *width * 0.5f;
+        auto accent = focus_border_color.nvg();
+        accent.a *= reveal;
         ctx.beginPath();
         ctx.strokeWidth(2.0f);
-        ctx.strokeColor(focus_border_color.nvg());
-        ctx.moveTo(*x + inset, *y + *height - 1.0f);
-        ctx.lineTo(*x + *width - inset, *y + *height - 1.0f);
+        ctx.strokeColor(accent);
+        ctx.moveTo(centre - half, underline_y);
+        ctx.lineTo(centre + half, underline_y);
+        ctx.stroke();
+    } else if (interactive) {
+        auto underline = border_color.nvg();
+        underline.a =
+            std::min(1.f, underline.a * (hovered() ? 3.6f : 2.4f));
+        ctx.beginPath();
+        ctx.strokeWidth(1.0f);
+        ctx.strokeColor(underline);
+        ctx.moveTo(*x + underline_inset, underline_y);
+        ctx.lineTo(*x + *width - underline_inset, underline_y);
         ctx.stroke();
     }
 
@@ -583,6 +609,7 @@ ui::textbox_widget::textbox_widget() : widget() {
     composition_underline_color.reset_to(palette.accent);
     hover_fill_alpha = palette.hover_fill_alpha;
     focus_fill_alpha = palette.focus_fill_alpha;
+    stroke_emphasize = palette.stroke_boost;
 }
 
 ui::textbox_widget::~textbox_widget() = default;
@@ -976,6 +1003,7 @@ void ui::textbox_widget::apply_key(int key, int mods, bool &text_changed) {
 }
 
 void ui::textbox_widget::tick(float delta_time) {
+    focus_underline->animate_to(focused() && !disabled ? 1.f : 0.f);
     if (disabled && focused()) {
         set_focus(false);
     }
