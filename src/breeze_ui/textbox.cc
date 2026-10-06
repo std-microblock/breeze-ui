@@ -497,30 +497,56 @@ void ui::textbox_widget::render(nanovg_context ctx) {
                           std::max(*height - 1.0f, 0.0f),
                           std::max(border_radius - 0.5f, 0.0f));
 
-    const float underline_inset = std::min(border_radius, *width * 0.5f);
-    const float underline_y = *y + *height - 1.0f;
+    auto bottom_edge = [&](float line_width, NVGcolor color) {
+        const float radius = std::clamp(border_radius, 0.f,
+                                        std::min(*width, *height) * 0.5f);
+        const float bottom = *y + *height;
+        const float top = bottom - line_width;
+        const float left = *x, right = *x + *width;
+        ctx.fillColor(color);
+        ctx.beginPath();
+        if (radius <= 0.5f || line_width >= radius) {
+            ctx.rect(left, top, *width, line_width);
+            ctx.fill();
+            return;
+        }
+        const float cross = std::sqrt(line_width / radius);
+        const float entry = 1.f - cross;
+        constexpr int kSteps = 6;
+        ctx.moveTo(left + radius * entry * entry, top);
+        ctx.lineTo(right - radius * entry * entry, top);
+        for (int i = 1; i <= kSteps; ++i) {
+            const float s = cross * (1.f - static_cast<float>(i) / kSteps);
+            const float d = 1.f - s;
+            ctx.lineTo(right - radius * d * d, bottom - radius * s * s);
+        }
+        ctx.lineTo(left + radius, bottom);
+        for (int i = 1; i <= kSteps; ++i) {
+            const float t =
+                entry + (1.f - entry) * (1.f - static_cast<float>(i) / kSteps);
+            const float d = 1.f - t;
+            ctx.lineTo(left + radius * t * t, bottom - radius * d * d);
+        }
+        ctx.closePath();
+        ctx.fill();
+    };
+
     if (is_focused) {
         const float reveal = std::clamp(focus_underline->var(), 0.f, 1.f);
-        const float half = (*width * 0.5f - underline_inset) * reveal;
-        const float centre = *x + *width * 0.5f;
         auto accent = focus_border_color.nvg();
         accent.a *= reveal;
-        ctx.beginPath();
-        ctx.strokeWidth(2.0f);
-        ctx.strokeColor(accent);
-        ctx.moveTo(centre - half, underline_y);
-        ctx.lineTo(centre + half, underline_y);
-        ctx.stroke();
+        auto clip = ctx.transaction();
+        if (reveal < 0.999f) {
+            const float half = *width * 0.5f * reveal + 0.5f;
+            const float centre = *x + *width * 0.5f;
+            ctx.intersectScissor(centre - half, *y, half * 2.0f, *height);
+        }
+        bottom_edge(2.0f, accent);
     } else if (interactive) {
         auto underline = border_color.nvg();
         underline.a =
             std::min(1.f, underline.a * (hovered() ? 3.6f : 2.4f));
-        ctx.beginPath();
-        ctx.strokeWidth(1.0f);
-        ctx.strokeColor(underline);
-        ctx.moveTo(*x + underline_inset, underline_y);
-        ctx.lineTo(*x + *width - underline_inset, underline_y);
-        ctx.stroke();
+        bottom_edge(1.0f, underline);
     }
 
     auto t = ctx.transaction();
