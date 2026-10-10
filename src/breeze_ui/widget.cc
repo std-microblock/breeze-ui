@@ -745,6 +745,9 @@ YGSize ui::text_widget::measure(float w, YGMeasureMode wm, float,
         return {std::min(widest, wrap),
                 (count - 1) * line_height * line_height_multiplier + line_box};
     }
+    // 单行省略/裁剪: 拿到可用宽度就按它收窄, 否则宽度会撑成自然宽度被父级直接切掉
+    if (text_overflow != overflow::wrap && wm == YGMeasureModeAtMost && w > 0 && nw > w)
+        return {w, line_box};
     return {nw, line_box};
 }
 
