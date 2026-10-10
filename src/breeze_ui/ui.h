@@ -83,6 +83,9 @@ struct render_target {
     bool key_down(int key) const;
     bool is_hovered(const widget *w) const;
     widget *hovered_widget() const;
+    void refresh_cursor();
+    void apply_cursor();
+    std::atomic_int active_cursor_shape{static_cast<int>(cursor_shape::arrow)};
     void request_frame();
     void schedule_frame(float delay_ms);
     void refresh_screen_info();

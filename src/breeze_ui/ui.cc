@@ -1,5 +1,6 @@
 #include "glad/glad.h"
 #include "swcadef.h"
+#include <array>
 #include <cmath>
 #include <dwmapi.h>
 #include <future>
@@ -222,6 +223,11 @@ LRESULT CALLBACK render_target_wndproc(HWND hwnd, UINT msg, WPARAM wparam,
         return DefWindowProcW(hwnd, msg, wparam, lparam);
     }
 
+    if (msg == WM_SETCURSOR && LOWORD(lparam) == HTCLIENT) {
+        rt->apply_cursor();
+        return TRUE;
+    }
+
     if (msg == WM_IME_SETCONTEXT && wparam) {
         lparam &= ~ISC_SHOWUICOMPOSITIONWINDOW;
         return CallWindowProcW(original, hwnd, msg, wparam, lparam);
@@ -420,6 +426,39 @@ widget *render_target::hovered_widget() const {
     return hover_chain.empty() ? nullptr : hover_chain.front();
 }
 
+namespace {
+HCURSOR system_cursor(cursor_shape shape) {
+    static const std::array<LPCSTR, 6> ids = {
+        IDC_ARROW, IDC_IBEAM, IDC_HAND, IDC_CROSS, IDC_SIZEWE, IDC_SIZENS};
+    static std::array<HCURSOR, 6> cursors{};
+    const auto index = static_cast<size_t>(shape);
+    if (!cursors[index]) {
+        cursors[index] = LoadCursorA(nullptr, ids[index]);
+    }
+    return cursors[index];
+}
+} // namespace
+
+void render_target::refresh_cursor() {
+    if (!window) {
+        return;
+    }
+    auto shape = cursor_shape::arrow;
+    for (auto *w : hover_chain) {
+        if (auto wanted = w->effective_cursor()) {
+            shape = *wanted;
+            break;
+        }
+    }
+    active_cursor_shape.store(static_cast<int>(shape));
+    apply_cursor();
+}
+
+void render_target::apply_cursor() {
+    SetCursor(
+        system_cursor(static_cast<cursor_shape>(active_cursor_shape.load())));
+}
+
 void render_target::refresh_screen_info() {
     auto monitor =
         MonitorFromWindow(glfwGetWin32Window(window), MONITOR_DEFAULTTONEAREST);
@@ -486,6 +525,7 @@ void render_target::update_hover(widget *target) {
             (*it)->handle_mouse_enter();
         }
     }
+    refresh_cursor();
     request_frame();
 }
 

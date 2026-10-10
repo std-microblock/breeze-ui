@@ -712,6 +712,13 @@ void ui::textbox_widget::handle_mouse_leave() {
     request_repaint();
 }
 
+std::optional<ui::cursor_shape> ui::textbox_widget::default_cursor() const {
+    if (disabled) {
+        return std::nullopt;
+    }
+    return cursor_shape::text;
+}
+
 void ui::textbox_widget::handle_mouse_down(mouse_event &e) {
     if (e.button != mouse_button::left || disabled)
         return;

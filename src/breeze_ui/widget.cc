@@ -527,6 +527,25 @@ bool ui::widget::hovered() const {
     return owner_rt && owner_rt->is_hovered(this);
 }
 
+std::optional<ui::cursor_shape> ui::widget::default_cursor() const {
+    return std::nullopt;
+}
+
+std::optional<ui::cursor_shape> ui::widget::effective_cursor() const {
+    return cursor ? cursor : default_cursor();
+}
+
+void ui::widget::set_cursor(std::optional<cursor_shape> shape) {
+    if (cursor == shape) {
+        return;
+    }
+    cursor = shape;
+    if (owner_rt) {
+        owner_rt->post_loop_thread_task(
+            [rt = owner_rt] { rt->refresh_cursor(); });
+    }
+}
+
 bool ui::widget::pressed() const {
     return owner_rt && owner_rt->mouse_down && hovered();
 }

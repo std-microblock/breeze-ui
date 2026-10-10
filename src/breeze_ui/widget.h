@@ -25,6 +25,15 @@ struct screen_info {
 
 enum class mouse_button { left = 0, right = 1, middle = 2 };
 
+enum class cursor_shape {
+    arrow,
+    text,
+    hand,
+    crosshair,
+    size_h,
+    size_v
+};
+
 struct mouse_event {
     float x = 0, y = 0;
     mouse_button button = mouse_button::left;
@@ -149,6 +158,10 @@ struct widget : std::enable_shared_from_this<widget> {
     bool hovered() const;
     bool pressed() const;
 
+    std::optional<cursor_shape> cursor;
+    std::optional<cursor_shape> effective_cursor() const;
+    void set_cursor(std::optional<cursor_shape> shape);
+
     void request_repaint();
     void mark_layout_dirty();
 
@@ -186,6 +199,7 @@ struct widget : std::enable_shared_from_this<widget> {
     void invalidate_measure();
 
     virtual bool hit_test(float px, float py) const;
+    virtual std::optional<cursor_shape> default_cursor() const;
     virtual void handle_mouse_enter() {}
     virtual void handle_mouse_leave() {}
     virtual void handle_mouse_move(mouse_event &e) {}
@@ -429,6 +443,7 @@ struct textbox_widget : public widget {
 
     void handle_mouse_enter() override;
     void handle_mouse_leave() override;
+    std::optional<cursor_shape> default_cursor() const override;
     void handle_mouse_down(mouse_event &e) override;
     void handle_mouse_move(mouse_event &e) override;
     void handle_mouse_up(mouse_event &e) override;
