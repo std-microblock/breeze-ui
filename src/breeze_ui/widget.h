@@ -130,6 +130,9 @@ struct widget : std::enable_shared_from_this<widget> {
 
     float flex_grow = 0.0f;
     float flex_shrink = 0.0f;
+    float style_min_width = YGUndefined;
+    float style_min_height = YGUndefined;
+    YGAlign style_align_self = YGAlignAuto;
 
     bool manual_position = false;
     bool manual_size = false;
@@ -311,8 +314,10 @@ struct flex_widget : public widget {
     };
 
     enum class align { start, end, center, stretch, free };
+    enum class wrap { nowrap, wrap, wrap_reverse };
 
     float max_height = INFINITY;
+    wrap flex_wrap = wrap::nowrap;
     bool enable_scrolling = false;
     sp_anim_float scroll_top =
         paint_only(anim_float(0, 150, easing_type::ease_in_out));
@@ -353,12 +358,17 @@ struct flex_widget : public widget {
 };
 
 struct text_widget : public widget {
+    // wrap: 换行; clip: 只画一行, 超出部分由父级裁剪; ellipsis: 只画一行, 末尾补 …
+    enum class overflow { wrap, clip, ellipsis };
+
     std::string text;
     float font_size = 14;
     int font_weight = 400;
     std::string font_family = "main";
     animated_color color = {this, 0, 0, 0, 1, "txt"};
     float max_width = -1;
+    float line_height_multiplier = 1.f;
+    overflow text_overflow = overflow::wrap;
     bool shrink_vertical = true, shrink_horizontal = true;
 
     void render(nanovg_context ctx) override;
@@ -374,6 +384,8 @@ struct text_widget : public widget {
         int font_weight;
         std::string font_family;
         float max_width;
+        float line_height_multiplier;
+        overflow text_overflow;
     };
     struct wrap_cache_key {
         measure_key measure;
@@ -386,6 +398,7 @@ struct text_widget : public widget {
     float natural_width = 0;
     int face(nanovg_context &ctx) const;
     void render_wrapped(nanovg_context &ctx, float w);
+    void render_elided(nanovg_context &ctx, float w);
 };
 
 struct textbox_widget : public widget {

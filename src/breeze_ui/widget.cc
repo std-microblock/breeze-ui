@@ -56,6 +56,18 @@ YGAlign to_yoga(ui::flex_widget::align a) {
     }
 }
 
+YGWrap to_yoga(ui::flex_widget::wrap w) {
+    using enum ui::flex_widget::wrap;
+    switch (w) {
+    case wrap:
+        return YGWrapWrap;
+    case wrap_reverse:
+        return YGWrapWrapReverse;
+    default:
+        return YGWrapNoWrap;
+    }
+}
+
 } // namespace
 
 bool ui::key_event::shift() const { return mods & GLFW_MOD_SHIFT; }
@@ -112,6 +124,9 @@ void ui::widget::before_layout() {
         user_height = height->dest();
     YGNodeStyleSetFlexGrow(node, flex_grow);
     YGNodeStyleSetFlexShrink(node, flex_shrink);
+    YGNodeStyleSetMinWidth(node, style_min_width);
+    YGNodeStyleSetMinHeight(node, style_min_height);
+    YGNodeStyleSetAlignSelf(node, style_align_self);
     const bool plain = !lays_out_children() && !has_measure();
     apply_user_size(plain || manual_size, plain || manual_size);
 }
@@ -582,6 +597,7 @@ void ui::flex_widget::before_layout() {
     YGNodeStyleSetJustifyContent(node, to_yoga(justify_content));
     YGNodeStyleSetAlignItems(node, to_yoga(align_items));
     YGNodeStyleSetGap(node, YGGutterAll, gap);
+    YGNodeStyleSetFlexWrap(node, to_yoga(flex_wrap));
     YGNodeStyleSetPadding(node, YGEdgeLeft, *padding_left);
     YGNodeStyleSetPadding(node, YGEdgeRight, *padding_right);
     YGNodeStyleSetPadding(node, YGEdgeTop, *padding_top);
@@ -638,7 +654,7 @@ void ui::flex_widget::render_scrollbar(nanovg_context &ctx) {
         return;
     auto h = height->dest();
     auto scrollbar_height = h * h / actual_height;
-    auto scrollbar_x = width->dest() - scroll_bar_width - 2 + *x;
+    auto scrollbar_x = width->dest() - scroll_bar_width - scroll_bar_margin + *x;
     auto scrollbar_y =
         *y - *scroll_top / (actual_height - h) * (h - scrollbar_height);
     ctx.fillColor(scroll_bar_color);
@@ -676,9 +692,12 @@ void ui::text_widget::before_layout() {
         last_key->font_size != font_size ||
         last_key->font_weight != font_weight ||
         last_key->font_family != font_family ||
-        last_key->max_width != max_width) {
-        last_key = measure_key{text, font_size, font_weight, font_family,
-                               max_width};
+        last_key->max_width != max_width ||
+        last_key->line_height_multiplier != line_height_multiplier ||
+        last_key->text_overflow != text_overflow) {
+        last_key = measure_key{text,        font_size,   font_weight,
+                               font_family, max_width,   line_height_multiplier,
+                               text_overflow};
         invalidate_measure();
     }
 }
@@ -705,6 +724,9 @@ YGSize ui::text_widget::measure(float w, YGMeasureMode wm, float,
             wrap = w;
     }
     if (wrap > 0 && nw > wrap) {
+        if (text_overflow != overflow::wrap)
+            return {wrap, line_box};
+
         const char *cursor = text.c_str();
         const char *end = cursor + text.size();
         NVGtextRow rows[16];
@@ -721,7 +743,7 @@ YGSize ui::text_widget::measure(float w, YGMeasureMode wm, float,
         }
         count = std::max(count, 1);
         return {std::min(widest, wrap),
-                (count - 1) * line_height + line_box};
+                (count - 1) * line_height * line_height_multiplier + line_box};
     }
     return {nw, line_box};
 }
@@ -734,7 +756,12 @@ void ui::text_widget::render(nanovg_context ctx) {
 
     const float w = width->var();
     if (natural_width > w + 0.5f && w > 0) {
-        render_wrapped(ctx, w);
+        if (text_overflow == overflow::ellipsis)
+            render_elided(ctx, w);
+        else if (text_overflow == overflow::wrap)
+            render_wrapped(ctx, w);
+        else
+            ctx.text(*x, *y, text.c_str(), nullptr);
     } else {
         ctx.text(*x, *y, text.c_str(), nullptr);
     }
@@ -749,7 +776,9 @@ void ui::text_widget::render_wrapped(nanovg_context &ctx, float w) {
         wrap_key->measure.font_weight != font_weight ||
         wrap_key->measure.font_family != font_family) {
         wrap_key = wrap_cache_key{
-            {text, font_size, font_weight, font_family, max_width}, w, scale};
+            {text, font_size, font_weight, font_family, max_width,
+             line_height_multiplier, text_overflow},
+            w, scale};
         wrap_rows.clear();
         const char *begin = text.c_str();
         const char *cursor = begin;
@@ -773,8 +802,27 @@ void ui::text_widget::render_wrapped(nanovg_context &ctx, float w) {
     for (auto [start, end] : wrap_rows) {
         if (!ctx.outside_clip(*x, row_y, w, line_height, line_height))
             ctx.text(*x, row_y, base + start, base + end);
-        row_y += line_height;
+        row_y += line_height * line_height_multiplier;
     }
+}
+
+/* 单行省略: 先量出 "…" 的宽度, 再让 nanovg 在剩余宽度里断一次行, 取到的
+   前缀就是能放下的部分。 */
+void ui::text_widget::render_elided(nanovg_context &ctx, float w) {
+    static constexpr const char *kEllipsis = "…";
+    const float ellipsis_width = ctx.measureText(kEllipsis).first;
+    const float limit = std::max(1.f, w - ellipsis_width);
+    NVGtextRow rows[1];
+    const char *begin = text.c_str();
+    std::string shown;
+    if (ctx.textBreakLines(begin, begin + text.size(), limit, rows, 1) > 0)
+        shown.assign(rows[0].start, rows[0].end - rows[0].start);
+    else
+        shown = text;
+    while (!shown.empty() && shown.back() == ' ')
+        shown.pop_back();
+    shown += kEllipsis;
+    ctx.text(*x, *y, shown.c_str(), nullptr);
 }
 
 ui::button_widget::button_widget(const std::string &button_text)
