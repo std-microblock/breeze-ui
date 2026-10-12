@@ -200,6 +200,7 @@ struct widget : std::enable_shared_from_this<widget> {
     virtual YGSize measure(float width, YGMeasureMode width_mode, float height,
                            YGMeasureMode height_mode);
     void invalidate_measure();
+    void invalidate_measure_tree();
 
     virtual bool hit_test(float px, float py) const;
     virtual std::optional<cursor_shape> default_cursor() const;
@@ -538,6 +539,7 @@ struct button_widget : public ui::padding_widget {
                        border_left = {this, 0, 0, 0, 0};
 
     void render(ui::nanovg_context ctx) override;
+    void before_layout() override;
 
     ui::animated_color bg_color = {this, 40 / 255.f, 40 / 255.f, 40 / 255.f,
                                    0.6};

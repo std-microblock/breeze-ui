@@ -100,6 +100,16 @@ void ui::widget::invalidate_measure() {
     mark_layout_dirty();
 }
 
+void ui::widget::invalidate_measure_tree() {
+    invalidate_measure();
+    for (auto list : {&children, &floating}) {
+        for (auto &c : *list) {
+            if (c)
+                c->invalidate_measure_tree();
+        }
+    }
+}
+
 void ui::widget::apply_user_size(bool w, bool h) {
     w = w || fixed_width;
     h = h || fixed_height;
@@ -226,9 +236,16 @@ bool ui::flex_widget::child_axis_free(bool horizontal_axis) const {
 }
 
 void ui::widget::apply_layout_tree() {
+    // 布局值来自字体度量, 常是小数. 直接使用会让文字落在半像素上, 和整像素的边框/图标一比
+    // 就显得偏了, 所以统一吸附到整设备像素
+    const float scale = owner_rt && owner_rt->dpi_scale > 0 ? owner_rt->dpi_scale : 1.f;
+    auto align_to_pixel = [scale](float v) {
+        return std::round(v * scale) / scale;
+    };
     const bool snap = snap_initial_layout && !laid_out;
-    auto place = [snap](sp_anim_float &v, float to) {
-        snap ? v->reset_to(to) : v->animate_to(to);
+    auto place = [snap, &align_to_pixel](sp_anim_float &v, float to) {
+        snap ? v->reset_to(align_to_pixel(to))
+             : v->animate_to(align_to_pixel(to));
     };
     const bool attached = attached_to_parent();
     if (attached) {
@@ -839,13 +856,19 @@ ui::button_widget::button_widget(const std::string &button_text)
 ui::button_widget::button_widget() {
     padding_bottom->reset_to(10);
     padding_top->reset_to(10);
-    padding_left->reset_to(22);
-    padding_right->reset_to(20);
+    padding_left->reset_to(21);
+    padding_right->reset_to(21);
 
     border_top.reset_to({1, 1, 1, 0.12});
     border_right.reset_to({1, 1, 1, 0.04});
     border_bottom.reset_to({1, 1, 1, 0.02});
     border_left.reset_to({1, 1, 1, 0.04});
+}
+
+void ui::button_widget::before_layout() {
+    padding_widget::before_layout();
+    YGNodeStyleSetAlignItems(node, YGAlignCenter);
+    YGNodeStyleSetJustifyContent(node, YGJustifyCenter);
 }
 
 void ui::button_widget::render(ui::nanovg_context ctx) {

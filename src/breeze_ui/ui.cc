@@ -1151,8 +1151,12 @@ std::expected<bool, std::string> render_target::init_global() {
     return future.get();
 }
 void render_target::reset_view() {
-    if (!nvg)
+    if (!nvg) {
         nvg = nvgCreateGL3(NVG_STENCIL_STROKES | NVG_ANTIALIAS);
+        // 量测依赖 nanovg 上下文; 上下文建好前量过的控件拿到的是 0 并被 yoga 缓存住
+        if (root)
+            root->invalidate_measure_tree();
+    }
 }
 void render_target::set_position(int x, int y) {
     glfwSetWindowPos(window, x, y);
