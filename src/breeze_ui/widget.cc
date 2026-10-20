@@ -110,6 +110,12 @@ void ui::widget::invalidate_measure_tree() {
     }
 }
 
+float ui::widget::align_to_pixel(float v) const {
+    const float scale =
+        owner_rt && owner_rt->dpi_scale > 0 ? owner_rt->dpi_scale : 1.f;
+    return std::round(v * scale) / scale;
+}
+
 void ui::widget::apply_user_size(bool w, bool h) {
     w = w || fixed_width;
     h = h || fixed_height;
@@ -238,12 +244,8 @@ bool ui::flex_widget::child_axis_free(bool horizontal_axis) const {
 void ui::widget::apply_layout_tree() {
     // 布局值来自字体度量, 常是小数. 直接使用会让文字落在半像素上, 和整像素的边框/图标一比
     // 就显得偏了, 所以统一吸附到整设备像素
-    const float scale = owner_rt && owner_rt->dpi_scale > 0 ? owner_rt->dpi_scale : 1.f;
-    auto align_to_pixel = [scale](float v) {
-        return std::round(v * scale) / scale;
-    };
     const bool snap = snap_initial_layout && !laid_out;
-    auto place = [snap, &align_to_pixel](sp_anim_float &v, float to) {
+    auto place = [this, snap](sp_anim_float &v, float to) {
         snap ? v->reset_to(align_to_pixel(to))
              : v->animate_to(align_to_pixel(to));
     };
@@ -640,8 +642,10 @@ void ui::flex_widget::after_layout() {
             std::max(content_bottom, YGNodeLayoutGetTop(c->node) +
                                          YGNodeLayoutGetHeight(c->node));
     }
-    actual_height =
-        content_bottom + YGNodeLayoutGetPadding(node, YGEdgeBottom);
+    // 内容和 height 必须用同一套吸附, 否则差的这点零头会让 render_scrollbar() 误判
+    // "内容超出" —— 明明全部显示却画出滚动条, 而且还能滚那零点几像素
+    actual_height = align_to_pixel(
+        content_bottom + YGNodeLayoutGetPadding(node, YGEdgeBottom));
     if (!enable_scrolling) {
         if (scroll_top->dest() != 0)
             scroll_top->reset_to(0);
