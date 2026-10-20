@@ -201,6 +201,10 @@ struct widget : std::enable_shared_from_this<widget> {
                            YGMeasureMode height_mode);
     void invalidate_measure();
     void invalidate_measure_tree();
+    // 把布局值吸附到整设备像素. 布局算出来常是小数, 直接画会落在半像素上.
+    // 凡是要和 animated 的 width/height 比较的地方都必须走同一个函数, 否则两边
+    // 差的这点零头会被当成"内容超出", 冒出不该有的滚动条.
+    float align_to_pixel(float v) const;
 
     virtual bool hit_test(float px, float py) const;
     virtual std::optional<cursor_shape> default_cursor() const;
